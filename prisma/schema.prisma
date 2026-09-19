@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ParcelStatus {
+  BOOKED
+  LOADED
+  IN_TRANSIT
+  UNLOADED
+  CLAIMED
+}
+
+model Trip {
+  id                String   @id @default(cuid())
+  routeName         String
+  busNumber         String
+  departureDepot    String
+  arrivalDepot      String
+  scheduledDeparture DateTime
+  distanceKm        Int
+  parcels           Parcel[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Parcel {
+  id               String        @id @default(cuid())
+  waybillId        String        @unique
+  senderName       String
+  senderPhone      String
+  receiverName     String
+  receiverPhone    String
+  weightKg         Float
+  description      String
+  calculatedFare   Float
+  status           ParcelStatus  @default(BOOKED)
+  tripId           String
+  trip             Trip          @relation(fields: [tripId], references: [id])
+  whatsappOptedIn  Boolean       @default(false)
+  statusLogs       StatusLog[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model StatusLog {
+  id        String       @id @default(cuid())
+  parcelId  String
+  parcel    Parcel       @relation(fields: [parcelId], references: [id])
+  status    ParcelStatus
+  timestamp DateTime     @default(now())
+  note      String?
+}

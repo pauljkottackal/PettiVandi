@@ -1,7 +1,8 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // html5-qrcode uses browser APIs, exclude from server bundle
+  serverExternalPackages: ['html5-qrcode'],
+}
 
-export default nextConfig;
+export default nextConfig

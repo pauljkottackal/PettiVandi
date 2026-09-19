@@ -1,69 +1,72 @@
-import Image from "next/image";
+import Link from 'next/link'
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="min-h-screen flex flex-col">
+      {/* Header */}
+      <header style={{ backgroundColor: 'var(--color-green)' }} className="px-6 py-8 text-white">
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">PettiVandi</h1>
+            <span className="text-sm font-medium opacity-70">by KSRTC</span>
+          </div>
+          <p className="mt-1 text-base opacity-80">Digital parcel booking &amp; tracking on state buses</p>
+        </div>
+      </header>
+
+      {/* Role selector */}
+      <div className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-2xl">
+          <p className="text-sm font-medium uppercase tracking-widest mb-8" style={{ color: 'var(--color-muted)' }}>
+            Select your role to continue
+          </p>
+
+          <div className="flex flex-col gap-4">
+            <Link href="/depot" className="group block w-full rounded-none border-2 px-8 py-6 transition-all hover:scale-[1.01]" style={{ backgroundColor: 'var(--color-green)', borderColor: 'var(--color-green)', color: 'white' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📦</span>
+                    <span className="text-xl font-semibold">Depot Clerk</span>
+                  </div>
+                  <p className="mt-1 text-sm opacity-75 ml-9">Book parcels, generate waybills, manage loading</p>
+                </div>
+                <span className="text-2xl opacity-50 group-hover:opacity-100 transition-opacity">→</span>
+              </div>
+            </Link>
+
+            <Link href="/conductor" className="group block w-full rounded-none border-2 px-8 py-6 transition-all hover:scale-[1.01]" style={{ backgroundColor: 'var(--color-text)', borderColor: 'var(--color-text)', color: 'white' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🚌</span>
+                    <span className="text-xl font-semibold">Conductor</span>
+                  </div>
+                  <p className="mt-1 text-sm opacity-75 ml-9">Scan QR codes, confirm loading and delivery</p>
+                </div>
+                <span className="text-2xl opacity-50 group-hover:opacity-100 transition-opacity">→</span>
+              </div>
+            </Link>
+
+            <Link href="/track" className="group block w-full rounded-none border-2 px-8 py-6 transition-all hover:scale-[1.01]" style={{ backgroundColor: 'var(--color-white)', borderColor: 'var(--color-muted)', color: 'var(--color-text)' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">📍</span>
+                    <span className="text-xl font-semibold">Track a Parcel</span>
+                  </div>
+                  <p className="mt-1 text-sm ml-9" style={{ color: 'var(--color-muted)' }}>Enter a waybill ID to see live status</p>
+                </div>
+                <span className="text-2xl transition-opacity" style={{ color: 'var(--color-muted)' }}>→</span>
+              </div>
+            </Link>
+          </div>
+
+          <p className="mt-10 text-xs text-center" style={{ color: 'var(--color-muted)' }}>
+            Kerala State Road Transport Corporation · Parcel Service MVP
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+      </div>
+    </main>
+  )
 }

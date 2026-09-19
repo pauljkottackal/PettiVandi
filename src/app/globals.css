@@ -1,26 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+@theme {
+  --color-green: #0B6157;
+  --color-green-dark: #094d45;
+  --color-green-light: #0d7a6e;
+  --color-amber: #E8820C;
+  --color-amber-dark: #c46e09;
+  --color-amber-light: #f0943a;
+  --color-stone: #F5F2EE;
+  --color-stone-dark: #E8E3DC;
+  --color-text: #1A1A1A;
+  --color-muted: #7A8694;
+  --font-family-sans: 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+/* CSS variable aliases for inline style="" usage */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-green: #0B6157;
+  --color-amber: #E8820C;
+  --color-bg: #F5F2EE;
+  --color-text: #1A1A1A;
+  --color-muted: #7A8694;
+  --color-white: #FFFFFF;
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+::selection {
+  background-color: var(--color-amber);
+  color: var(--color-white);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Print utilities */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    background: white;
+  }
+}
+
+.print-only {
+  display: none;
+}
+
+/* Timeline animation */
+@keyframes timeline-fill {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.timeline-animate {
+  animation: timeline-fill 0.4s ease forwards;
+}
+
+.timeline-animate:nth-child(1) { animation-delay: 0ms; }
+.timeline-animate:nth-child(2) { animation-delay: 120ms; }
+.timeline-animate:nth-child(3) { animation-delay: 240ms; }
+.timeline-animate:nth-child(4) { animation-delay: 360ms; }
+.timeline-animate:nth-child(5) { animation-delay: 480ms; }
