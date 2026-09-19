@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import StatusTimeline from '@/components/StatusTimeline'
 
 interface Trip {
@@ -53,9 +53,8 @@ export default function TrackPage() {
   const [waError, setWaError] = useState('')
   const [optInLoading, setOptInLoading] = useState(false)
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!query.trim()) return
+  const performSearch = async (waybillId: string) => {
+    if (!waybillId.trim()) return
     setLoading(true)
     setNotFound(false)
     setError('')
@@ -63,7 +62,7 @@ export default function TrackPage() {
     setWaStep('idle')
 
     try {
-      const res = await fetch(`/api/parcels/${encodeURIComponent(query.trim())}`)
+      const res = await fetch(`/api/parcels/${encodeURIComponent(waybillId.trim())}`)
       if (res.status === 404) {
         setNotFound(true)
         return
@@ -77,6 +76,23 @@ export default function TrackPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Check URL query param on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const id = params.get('id')
+      if (id) {
+        setQuery(id)
+        performSearch(id)
+      }
+    }
+  }, [])
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    performSearch(query)
   }
 
   const handleWhatsAppStep1 = () => {

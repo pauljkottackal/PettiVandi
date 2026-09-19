@@ -44,6 +44,7 @@ export default function ConductorPage() {
   const [queueCount, setQueueCount] = useState(0)
   const [syncResults, setSyncResults] = useState<string[]>([])
   const [transitioning, setTransitioning] = useState(false)
+  const [manualId, setManualId] = useState('')
 
   const refreshQueueCount = useCallback(() => {
     setQueueCount(getQueueCount())
@@ -226,8 +227,47 @@ export default function ConductorPage() {
       <div style={{ flex: 1, padding: '20px 16px 32px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: '200px' }}>
 
         {scanState.type === 'idle' && (
-          <div style={{ textAlign: 'center', paddingTop: '16px' }}>
-            <div style={{ fontSize: '15px', color: '#7A8694' }}>Point camera at a waybill QR code</div>
+          <div style={{ textAlign: 'center', paddingTop: '10px' }}>
+            <div style={{ fontSize: '13px', color: '#7A8694', marginBottom: '12px' }}>Point camera at waybill QR code</div>
+            <div style={{ display: 'flex', gap: '8px', maxWidth: '320px', margin: '0 auto' }}>
+              <input
+                placeholder="Or type Waybill ID (e.g. PV-2026-...)"
+                value={manualId}
+                onChange={(e) => setManualId(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && manualId.trim()) {
+                    handleScan(manualId.trim())
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '9px 12px',
+                  backgroundColor: '#222',
+                  border: '1px solid #444',
+                  color: '#FFF',
+                  fontSize: '12px',
+                  fontFamily: 'IBM Plex Sans, sans-serif',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (manualId.trim()) handleScan(manualId.trim())
+                }}
+                style={{
+                  padding: '9px 14px',
+                  backgroundColor: '#E8820C',
+                  color: 'white',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                Lookup
+              </button>
+            </div>
           </div>
         )}
 
