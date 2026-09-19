@@ -45,3 +45,8 @@ next-env.d.ts
 .env
 .env.local
 .env*.local
+
+# Internal tools, agent logs, and scratch scripts
+.agents/
+scratch/
+twilio_ai/

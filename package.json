@@ -8,6 +8,7 @@
     "postinstall": "prisma generate",
     "vercel-build": "prisma generate && next build",
     "start": "next start",
+    "test": "tsx test/whatsapp.test.ts",
     "lint": "eslint",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { enqueue, flush, getQueueCount, QueueItem } from '@/lib/offlineQueue'
 import { BusLogo, BusTransitIcon } from '@/components/BusIcons'
@@ -15,7 +16,15 @@ type ScanState =
   | { type: 'invalid_transition'; waybillId: string; status: string; message: string }
   | { type: 'not_found'; waybillId: string }
   | { type: 'network_error'; waybillId: string; nextStatus: string }
-  | { type: 'success'; waybillId: string; newStatus: string }
+  | {
+      type: 'success'
+      waybillId: string
+      newStatus: string
+      whatsappLinks?: { sender?: string; receiver?: string }
+      receiverName?: string
+      senderName?: string
+      whatsappDispatch?: { mode?: string; details?: string }
+    }
 
 const STATUS_LABELS: Record<string, string> = {
   BOOKED: 'Booked at Depot',
@@ -155,7 +164,15 @@ export default function ConductorPage() {
           setScanState({ type: 'invalid_transition', waybillId, status: scanState.currentStatus, message: data.error ?? 'Transition failed' })
         }
       } else {
-        setScanState({ type: 'success', waybillId, newStatus: nextStatus })
+        setScanState({
+          type: 'success',
+          waybillId,
+          newStatus: nextStatus,
+          whatsappLinks: data.whatsappLinks,
+          receiverName: data.receiverName,
+          senderName: data.senderName,
+          whatsappDispatch: data.whatsappDispatch,
+        })
       }
     } catch {
       // Queue offline
@@ -230,9 +247,9 @@ export default function ConductorPage() {
               Sync ({queueCount})
             </button>
           )}
-          <a href="/" style={{ color: '#A0A0A0', fontSize: '12px', textDecoration: 'none' }}>
+          <Link href="/" style={{ color: '#A0A0A0', fontSize: '12px', textDecoration: 'none' }}>
             Exit
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -450,6 +467,91 @@ export default function ConductorPage() {
                 Status is now: {STATUS_LABELS[scanState.newStatus] ?? scanState.newStatus}
               </div>
             </div>
+
+            {/* 1-Click WhatsApp Notification Fallback for Mobile Conductor */}
+            {scanState.whatsappLinks && (
+              <div
+                style={{
+                  backgroundColor: '#1C1C1C',
+                  border: '1px solid rgba(37, 211, 102, 0.25)',
+                  borderRadius: '6px',
+                  padding: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', color: '#A0A0A0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    💬 Notify Customer on WhatsApp
+                  </span>
+                  {scanState.whatsappDispatch?.mode && (
+                    <span
+                      className="font-mono"
+                      style={{
+                        fontSize: '10px',
+                        color: scanState.whatsappDispatch.mode === 'automated' ? '#3ECF8E' : '#E8820C',
+                      }}
+                    >
+                      {scanState.whatsappDispatch.mode === 'automated' ? 'Automated Sent' : 'Click-to-Send Ready'}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {scanState.whatsappLinks.receiver && (
+                    <a
+                      href={scanState.whatsappLinks.receiver}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        flex: 1,
+                        padding: '10px 12px',
+                        backgroundColor: '#25D366',
+                        color: '#0A0A0A',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span>💬</span>
+                      <span>Send to Receiver {scanState.receiverName ? `(${scanState.receiverName})` : ''} ↗</span>
+                    </a>
+                  )}
+                  {scanState.whatsappLinks.sender && (
+                    <a
+                      href={scanState.whatsappLinks.sender}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        padding: '10px 12px',
+                        backgroundColor: 'rgba(255,255,255,0.06)',
+                        color: '#EDEDED',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        textDecoration: 'none',
+                        textAlign: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span>Send to Sender ↗</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div style={{ flex: 1 }} />
             <button
               onClick={resetScan}

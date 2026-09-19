@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Navbar from '@/components/Navbar'
 import StatusTimeline from '@/components/StatusTimeline'
 import { BusLogo, BusTransitIcon, DepotIcon } from '@/components/BusIcons'
@@ -62,11 +62,6 @@ export default function Home() {
 
   // Scroll listener for hero bus movement
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setBusProgress(50)
-      return
-    }
-
     let ticking = false
     const handleScroll = () => {
       if (!ticking) {
@@ -86,17 +81,17 @@ export default function Home() {
       }
     }
 
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      window.requestAnimationFrame(() => setBusProgress(50))
+      return
+    }
+
     window.addEventListener('scroll', handleScroll, { passive: true })
     handleScroll()
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  // Auto-load sample parcel on mount for instant demonstration
-  useEffect(() => {
-    performSearch('PV-2026-5258WOG')
-  }, [])
-
-  const performSearch = async (waybillId: string) => {
+  const performSearch = useCallback(async (waybillId: string) => {
     if (!waybillId.trim()) return
     setLoading(true)
     setNotFound(false)
@@ -119,7 +114,12 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  // Auto-load sample parcel on mount for instant demonstration
+  useEffect(() => {
+    performSearch('PV-2026-5258WOG')
+  }, [performSearch])
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -634,7 +634,7 @@ export default function Home() {
                     }}
                   >
                     <p style={{ fontSize: '13px', color: '#EDEDED', margin: '0 0 14px', lineHeight: 1.5 }}>
-                      Once you've sent the join message in WhatsApp, tap below to activate updates.
+                      Once you&apos;ve sent the join message in WhatsApp, tap below to activate updates.
                     </p>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                       <button

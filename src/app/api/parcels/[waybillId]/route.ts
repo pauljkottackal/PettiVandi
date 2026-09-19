@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { generateBookingWhatsAppLinks, getBaseUrlFromRequest } from '@/lib/whatsappChat'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ waybillId: string }> }
 ) {
   try {
-    const { waybillId } = await params
+    const resolvedParams = await params
+    let waybillId = resolvedParams.waybillId || ''
+    try {
+      waybillId = decodeURIComponent(waybillId)
+    } catch {
+      // keep raw if decode fails
+    }
+    waybillId = waybillId.trim()
 
     const parcel = await prisma.parcel.findUnique({
       where: { waybillId },
@@ -25,7 +33,17 @@ export async function GET(
       )
     }
 
-    return NextResponse.json(parcel)
+    const baseUrl = getBaseUrlFromRequest(request)
+    const linksData = generateBookingWhatsAppLinks(parcel, baseUrl)
+
+    return NextResponse.json({
+      ...parcel,
+      whatsappLinks: {
+        sender: linksData.sender,
+        receiver: linksData.receiver,
+      },
+      whatsappMessage: linksData.message,
+    })
   } catch (error) {
     console.error('GET /api/parcels/[waybillId] error:', error)
     return NextResponse.json({ error: 'Failed to fetch parcel' }, { status: 500 })

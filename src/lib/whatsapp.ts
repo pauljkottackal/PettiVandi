@@ -1,4 +1,6 @@
 import twilio from 'twilio'
+import { normalizePhoneForWaMe } from './whatsappChat'
+export * from './whatsappChat'
 
 let client: ReturnType<typeof twilio> | null = null
 
@@ -12,41 +14,36 @@ function getClient() {
   return client
 }
 
-export function normalizeWhatsAppNumber(rawPhone: string): string {
-  // Strip whitespace, hyphens, brackets
-  let cleaned = rawPhone.trim().replace(/[\s\-()]/g, '')
-  if (!cleaned) return ''
+export function normalizeWhatsAppNumber(rawPhone?: string | null): string {
+  if (!rawPhone) return ''
+  const digits = normalizePhoneForWaMe(rawPhone)
+  if (!digits) return ''
+  return `whatsapp:+${digits}`
+}
 
-  // If starts with whatsapp: strip it first for clean normalization
-  if (cleaned.startsWith('whatsapp:')) {
-    cleaned = cleaned.replace('whatsapp:', '')
-  }
-
-  // Ensure leading +
-  if (!cleaned.startsWith('+')) {
-    // If leading 0 (domestic format), remove it
-    cleaned = cleaned.replace(/^0+/, '')
-    cleaned = `+91${cleaned}`
-  }
-
-  return `whatsapp:${cleaned}`
+export interface SendWhatsAppResult {
+  success: boolean
+  sid?: string
+  error?: string
+  code?: number | string
+  isTrialError?: boolean
 }
 
 export async function sendWhatsAppMessage(
   toPhone: string,
   body: string
-): Promise<{ success: boolean; sid?: string; error?: string }> {
+): Promise<SendWhatsAppResult> {
   const twilioClient = getClient()
 
   if (!twilioClient) {
     console.warn('[WhatsApp] Twilio credentials not configured in environment.')
-    return { success: false, error: 'Twilio not configured' }
+    return { success: false, error: 'Twilio not configured', isTrialError: true }
   }
 
   const from = process.env.TWILIO_WHATSAPP_NUMBER
   if (!from) {
     console.warn('[WhatsApp] TWILIO_WHATSAPP_NUMBER not set.')
-    return { success: false, error: 'TWILIO_WHATSAPP_NUMBER not set' }
+    return { success: false, error: 'TWILIO_WHATSAPP_NUMBER not set', isTrialError: true }
   }
 
   const to = normalizeWhatsAppNumber(toPhone)
@@ -62,13 +59,37 @@ export async function sendWhatsAppMessage(
     })
     console.log(`[WhatsApp] Successfully delivered to ${to} (SID: ${message.sid})`)
     return { success: true, sid: message.sid }
-  } catch (error: any) {
-    const errMsg = error?.message ?? String(error)
-    const errCode = error?.code ? `(Twilio Code: ${error.code})` : ''
-    console.error(`[WhatsApp] Failed to dispatch to ${to}: ${errMsg} ${errCode}`)
+  } catch (error: unknown) {
+    const err = error as { message?: string; code?: number | string; status?: number }
+    const errMsg = err?.message ?? String(error)
+    const errCode = err?.code ? `(Twilio Code: ${err.code})` : ''
+    const isTrialError =
+      err?.code === 21654 ||
+      err?.code === '21654' ||
+      err?.code === 21608 ||
+      err?.code === '21608' ||
+      err?.code === 63016 ||
+      err?.code === '63016' ||
+      err?.code === 63015 ||
+      err?.code === '63015' ||
+      err?.code === 63007 ||
+      err?.code === '63007' ||
+      err?.code === 572002 ||
+      err?.code === '572002' ||
+      errMsg.toLowerCase().includes('sandbox') ||
+      errMsg.toLowerCase().includes('trial') ||
+      errMsg.toLowerCase().includes('unverified') ||
+      errMsg.toLowerCase().includes('verified recipient') ||
+      errMsg.toLowerCase().includes('contentsid') ||
+      errMsg.toLowerCase().includes('content sid') ||
+      errMsg.toLowerCase().includes('template')
+
+    console.warn(`[WhatsApp] Delivery attempt to ${to} bypassed/failed: ${errMsg} ${errCode}`)
     return {
       success: false,
-      error: `${errMsg} ${errCode}`,
+      error: `${errMsg} ${errCode}`.trim(),
+      code: err?.code,
+      isTrialError,
     }
   }
 }
@@ -77,30 +98,38 @@ export async function sendWhatsAppMessage(
  * Dispatch message to both sender and receiver concurrently by default
  */
 export async function notifyBothParties(
-  senderPhone: string,
-  receiverPhone: string,
-  message: string
-): Promise<{ sender: { success: boolean }; receiver: { success: boolean } }> {
-  const tasks: Promise<{ success: boolean }>[] = []
-
-  // Receiver notification
-  if (receiverPhone) {
-    tasks.push(sendWhatsAppMessage(receiverPhone, message))
-  } else {
-    tasks.push(Promise.resolve({ success: false }))
-  }
-
-  // Sender notification (if different number)
-  const normSender = normalizeWhatsAppNumber(senderPhone)
+  senderPhone?: string | null,
+  receiverPhone?: string | null,
+  message: string = ''
+): Promise<{
+  receiver: SendWhatsAppResult
+  sender: SendWhatsAppResult
+  mode: 'automated' | 'click_to_send'
+}> {
   const normReceiver = normalizeWhatsAppNumber(receiverPhone)
+  const normSender = normalizeWhatsAppNumber(senderPhone)
 
-  if (senderPhone && normSender !== normReceiver) {
-    tasks.push(sendWhatsAppMessage(senderPhone, message))
-  } else {
-    // Same number or no sender phone, receiver already covered
-    tasks.push(Promise.resolve({ success: true }))
+  // If both phone numbers normalize to the same destination
+  if (normReceiver && normSender && normReceiver === normSender) {
+    const singleResult = await sendWhatsAppMessage(receiverPhone!, message)
+    return {
+      receiver: singleResult,
+      sender: singleResult,
+      mode: singleResult.success ? 'automated' : 'click_to_send',
+    }
   }
+
+  const tasks: [Promise<SendWhatsAppResult>, Promise<SendWhatsAppResult>] = [
+    normReceiver
+      ? sendWhatsAppMessage(receiverPhone!, message)
+      : Promise.resolve({ success: false, error: 'No receiver phone' }),
+    normSender
+      ? sendWhatsAppMessage(senderPhone!, message)
+      : Promise.resolve({ success: false, error: 'No sender phone' }),
+  ]
 
   const [receiverRes, senderRes] = await Promise.all(tasks)
-  return { receiver: receiverRes, sender: senderRes }
+  const mode = (receiverRes.success && senderRes.success) ? 'automated' : 'click_to_send'
+
+  return { receiver: receiverRes, sender: senderRes, mode }
 }

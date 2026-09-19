@@ -3,8 +3,8 @@ import { ParcelStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { calculateFare } from '@/lib/fareCalculation'
 import { generateWaybillId } from '@/lib/waybill'
-import { sendWhatsAppMessage, notifyBothParties } from '@/lib/whatsapp'
-import { getWhatsAppMessage } from '@/lib/stateMachine'
+import { notifyBothParties } from '@/lib/whatsapp'
+import { generateBookingWhatsAppLinks, getBaseUrlFromRequest } from '@/lib/whatsappChat'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +21,20 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json(parcels)
+    const baseUrl = getBaseUrlFromRequest(request)
+    const augmentedParcels = parcels.map((p) => {
+      const links = generateBookingWhatsAppLinks(p, baseUrl)
+      return {
+        ...p,
+        whatsappLinks: {
+          sender: links.sender,
+          receiver: links.receiver,
+        },
+        whatsappMessage: links.message,
+      }
+    })
+
+    return NextResponse.json(augmentedParcels)
   } catch (error) {
     console.error('GET /api/parcels error:', error)
     return NextResponse.json({ error: 'Failed to fetch parcels' }, { status: 500 })
@@ -80,21 +93,78 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Send instant WhatsApp booking confirmation to BOTH sender and receiver by default
-    const bookingMsg = getWhatsAppMessage(
-      parcel.waybillId,
-      ParcelStatus.BOOKED,
-      trip.busNumber,
-      trip.routeName,
-      trip.arrivalDepot
+    // Generate reliable WhatsApp click-to-chat links for both parties
+    const baseUrl = getBaseUrlFromRequest(request)
+    const linksData = generateBookingWhatsAppLinks(
+      {
+        waybillId: parcel.waybillId,
+        senderPhone: parcel.senderPhone,
+        receiverPhone: parcel.receiverPhone,
+        weightKg: parcel.weightKg,
+        calculatedFare: parcel.calculatedFare,
+        trip: {
+          departureDepot: trip.departureDepot,
+          arrivalDepot: trip.arrivalDepot,
+          busNumber: trip.busNumber,
+          routeName: trip.routeName,
+        },
+      },
+      baseUrl
     )
-    notifyBothParties(senderPhone, receiverPhone, bookingMsg).then((res) => {
-      console.log(`[WhatsApp] Booking dispatched to both parties:`, res)
-    }).catch((err) => {
-      console.error(`[WhatsApp] Booking dispatch error:`, err)
-    })
 
-    return NextResponse.json(parcel, { status: 201 })
+    // Attempt Twilio automated delivery if possible, catching trial errors cleanly
+    let dispatchMode: 'automated' | 'click_to_send' = 'click_to_send'
+    let automatedDetails = 'Click-to-chat fallback link ready'
+
+    try {
+      const dispatchPromise = notifyBothParties(senderPhone, receiverPhone, linksData.message)
+      let timeoutHandle: NodeJS.Timeout | undefined
+      const timeoutPromise = new Promise<null>((resolve) => {
+        timeoutHandle = setTimeout(() => resolve(null), 2500)
+      })
+      const dispatchResult = await Promise.race([dispatchPromise, timeoutPromise])
+      if (timeoutHandle) clearTimeout(timeoutHandle)
+
+      if (dispatchResult) {
+        if (dispatchResult.receiver.success && dispatchResult.sender.success) {
+          dispatchMode = 'automated'
+          automatedDetails = 'Twilio automated message dispatched to both parties'
+        } else if (dispatchResult.receiver.success && !dispatchResult.sender.success) {
+          dispatchMode = 'click_to_send'
+          automatedDetails = 'Automated message delivered to receiver; sender click-to-chat ready'
+        } else if (!dispatchResult.receiver.success && dispatchResult.sender.success) {
+          dispatchMode = 'click_to_send'
+          automatedDetails = 'Automated message delivered to sender; receiver click-to-chat ready (Twilio trial)'
+        } else {
+          dispatchMode = 'click_to_send'
+          const isTrial = dispatchResult.receiver.isTrialError || dispatchResult.sender.isTrialError
+          automatedDetails = isTrial
+            ? 'Twilio trial / sandbox restriction (click-to-send active)'
+            : (dispatchResult.receiver.error || dispatchResult.sender.error || 'Automated dispatch bypassed')
+        }
+      } else {
+        dispatchMode = 'click_to_send'
+        automatedDetails = 'Twilio automated dispatch timed out after 2.5s (click-to-send active)'
+      }
+    } catch (dispatchErr) {
+      console.warn('[WhatsApp] Automated dispatch handled gracefully:', dispatchErr)
+    }
+
+    return NextResponse.json(
+      {
+        ...parcel,
+        whatsappLinks: {
+          sender: linksData.sender,
+          receiver: linksData.receiver,
+        },
+        whatsappMessage: linksData.message,
+        whatsappDispatch: {
+          mode: dispatchMode,
+          details: automatedDetails,
+        },
+      },
+      { status: 201 }
+    )
   } catch (error) {
     console.error('POST /api/parcels error:', error)
     return NextResponse.json({ error: 'Failed to create parcel' }, { status: 500 })

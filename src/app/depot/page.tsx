@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import WaybillSlip from '@/components/WaybillSlip'
+import WhatsAppDispatchPanel, { WhatsAppDispatchParcel } from '@/components/WhatsAppDispatchPanel'
 import { BusLogo } from '@/components/BusIcons'
 
 interface Trip {
@@ -14,7 +16,7 @@ interface Trip {
   distanceKm: number
 }
 
-interface Parcel {
+interface Parcel extends WhatsAppDispatchParcel {
   id: string
   waybillId: string
   senderName: string
@@ -27,6 +29,15 @@ interface Parcel {
   status: string
   trip: Trip
   createdAt: string
+  whatsappLinks?: {
+    sender: string
+    receiver: string
+  }
+  whatsappMessage?: string
+  whatsappDispatch?: {
+    mode: 'automated' | 'click_to_send'
+    details?: string
+  }
 }
 
 function clientCalculateFare(weightKg: number, distanceKm: number): number {
@@ -41,12 +52,18 @@ export default function DepotPage() {
   const [bookedParcels, setBookedParcels] = useState<Parcel[]>([])
   const [createdParcel, setCreatedParcel] = useState<Parcel | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [rightTab, setRightTab] = useState<'whatsapp' | 'slip'>('whatsapp')
+  const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSelectManifestItem = (parcel: Parcel) => {
+  const handleSelectManifestItem = (parcel: Parcel, tab: 'whatsapp' | 'slip' = 'whatsapp', openModal = false) => {
     setCreatedParcel(parcel)
     setSelectedId(parcel.id)
+    setRightTab(tab)
+    if (openModal) {
+      setShowModal(true)
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -72,7 +89,7 @@ export default function DepotPage() {
     ])
     const tripsData = await tripsRes.json()
     const parcelsData = await parcelsRes.json()
-    setTrips(tripsData)
+    setTrips(Array.isArray(tripsData) ? tripsData : [])
     setBookedParcels(Array.isArray(parcelsData) ? parcelsData : [])
   }, [])
 
@@ -97,6 +114,9 @@ export default function DepotPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to create parcel')
       setCreatedParcel(data)
+      setSelectedId(data.id)
+      setRightTab('whatsapp')
+      setShowModal(true)
       setForm({ senderName: '', senderPhone: '', receiverName: '', receiverPhone: '', weightKg: '', description: '', tripId: '' })
       fetchData()
     } catch (err) {
@@ -130,15 +150,24 @@ export default function DepotPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <span className="font-mono" style={{ fontSize: '11px', color: '#A0A0A0' }}>STATION DESK</span>
-            <a href="/" style={{ color: '#A0A0A0', fontSize: '13px', textDecoration: 'none', padding: '5px 10px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <Link href="/" style={{ color: '#A0A0A0', fontSize: '13px', textDecoration: 'none', padding: '5px 10px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
               ← Switch Role
-            </a>
+            </Link>
           </div>
         </div>
       </header>
 
+      {/* Confirmation & WhatsApp Dispatch Interactive Modal */}
+      {showModal && createdParcel && (
+        <WhatsAppDispatchPanel
+          parcel={createdParcel}
+          isModal={true}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '40px', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: '32px', alignItems: 'start' }}>
           
           {/* Left: Booking Form */}
           <div
@@ -184,7 +213,7 @@ export default function DepotPage() {
                   />
                 </div>
                 <div>
-                  <label style={labelStyle}>Sender Mobile (SMS/Receipt)</label>
+                  <label style={labelStyle}>Sender Mobile (WhatsApp/Receipt)</label>
                   <input
                     className="pv-input font-mono"
                     value={form.senderPhone}
@@ -333,36 +362,71 @@ export default function DepotPage() {
                   transition: 'opacity 0.15s ease',
                 }}
               >
-                {loading ? 'Issuing Waybill…' : 'Issue Waybill & Assign to Hold →'}
+                {loading ? 'Issuing Waybill…' : 'Issue Waybill & Confirm WhatsApp Dispatch →'}
               </button>
             </form>
           </div>
 
-          {/* Right: Waybill Slip Preview */}
+          {/* Right: Interactive Tabs (WhatsApp Dispatch vs Waybill Slip) */}
           <div style={{ position: 'sticky', top: '24px' }}>
             {createdParcel ? (
-              <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Header with Switcher Tabs */}
                 <div
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    marginBottom: '12px',
                   }}
                 >
-                  <span
-                    className="font-mono"
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: '#3ECF8E',
-                      letterSpacing: '0.05em',
-                    }}
-                  >
-                    ✓ WAYBILL READY
-                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setRightTab('whatsapp')}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: rightTab === 'whatsapp' ? '#3ECF8E' : '#141414',
+                        color: rightTab === 'whatsapp' ? '#0A0A0A' : '#A0A0A0',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                    >
+                      <span>💬</span>
+                      <span>WhatsApp Dispatch</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRightTab('slip')}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: rightTab === 'slip' ? '#3ECF8E' : '#141414',
+                        color: rightTab === 'slip' ? '#0A0A0A' : '#A0A0A0',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                      }}
+                    >
+                      <span>🖨</span>
+                      <span>Waybill Slip</span>
+                    </button>
+                  </div>
+
                   <button
-                    onClick={() => setCreatedParcel(null)}
+                    onClick={() => {
+                      setCreatedParcel(null)
+                      setSelectedId(null)
+                    }}
                     style={{
                       fontSize: '11px',
                       color: '#A0A0A0',
@@ -371,15 +435,20 @@ export default function DepotPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    Clear Preview
+                    Clear
                   </button>
                 </div>
-                <WaybillSlip parcel={createdParcel} />
+
+                {rightTab === 'whatsapp' ? (
+                  <WhatsAppDispatchPanel parcel={createdParcel} />
+                ) : (
+                  <WaybillSlip parcel={createdParcel} />
+                )}
               </div>
             ) : (
               <div
                 style={{
-                  width: '320px',
+                  width: '100%',
                   minHeight: '480px',
                   border: '1px dashed rgba(255,255,255,0.12)',
                   borderRadius: '8px',
@@ -390,15 +459,15 @@ export default function DepotPage() {
                   justifyContent: 'center',
                   color: '#A0A0A0',
                   fontSize: '13px',
-                  gap: '8px',
+                  gap: '10px',
                   padding: '24px',
                   textAlign: 'center',
                 }}
               >
-                <span style={{ fontSize: '36px' }}>📦</span>
-                <span style={{ color: '#EDEDED', fontWeight: 600 }}>Waybill Slip Preview</span>
+                <span style={{ fontSize: '36px' }}>💬</span>
+                <span style={{ color: '#EDEDED', fontWeight: 600 }}>WhatsApp &amp; Slip Preview</span>
                 <span style={{ fontSize: '11px', color: '#777777', lineHeight: 1.4 }}>
-                  Fill the intake form to render official KSRTC luggage QR slip here.
+                  Fill the intake form or select any consignment from manifest to trigger 1-click WhatsApp dispatch and print slips.
                 </span>
               </div>
             )}
@@ -456,11 +525,11 @@ export default function DepotPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#141414' }}>
-                    {['Waybill ID', 'Sender', 'Receiver', 'Weight', 'Route', 'Fare', 'Booked At', 'Bill & Custody'].map((h) => (
+                    {['Waybill ID', 'Sender', 'Receiver', 'Weight', 'Route', 'Fare', 'Booked At', 'Actions & WhatsApp'].map((h) => (
                       <th
                         key={h}
                         style={{
-                          textAlign: h === 'Bill & Custody' ? 'right' : 'left',
+                          textAlign: h === 'Actions & WhatsApp' ? 'right' : 'left',
                           padding: '12px 14px',
                           fontSize: '10px',
                           fontWeight: 600,
@@ -481,7 +550,7 @@ export default function DepotPage() {
                     return (
                       <tr
                         key={p.id}
-                        onClick={() => handleSelectManifestItem(p)}
+                        onClick={() => handleSelectManifestItem(p, 'whatsapp')}
                         style={{
                           borderBottom: '1px solid rgba(255,255,255,0.06)',
                           cursor: 'pointer',
@@ -533,27 +602,51 @@ export default function DepotPage() {
                           {new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleSelectManifestItem(p)
-                            }}
-                            className="font-mono"
-                            style={{
-                              fontSize: '11px',
-                              padding: '5px 12px',
-                              backgroundColor: isSelected ? '#3ECF8E' : 'rgba(255,255,255,0.06)',
-                              color: isSelected ? '#0A0A0A' : '#EDEDED',
-                              border: '1px solid rgba(255,255,255,0.12)',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {isSelected ? 'Viewing Slip ✓' : 'View Bill & Slip →'}
-                          </button>
+                          <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSelectManifestItem(p, 'whatsapp', true)
+                              }}
+                              className="font-mono"
+                              style={{
+                                fontSize: '11px',
+                                padding: '5px 10px',
+                                backgroundColor: '#25D366',
+                                color: '#0A0A0A',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap',
+                              }}
+                              title="Open 1-click WhatsApp Dispatch Modal"
+                            >
+                              💬 WhatsApp
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSelectManifestItem(p, 'slip')
+                              }}
+                              className="font-mono"
+                              style={{
+                                fontSize: '11px',
+                                padding: '5px 10px',
+                                backgroundColor: isSelected && rightTab === 'slip' ? '#3ECF8E' : 'rgba(255,255,255,0.06)',
+                                color: isSelected && rightTab === 'slip' ? '#0A0A0A' : '#EDEDED',
+                                border: '1px solid rgba(255,255,255,0.12)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Slip →
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )

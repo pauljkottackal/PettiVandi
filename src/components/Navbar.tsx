@@ -122,7 +122,7 @@ export default function Navbar() {
 
         {/* Center: Nav Links */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <a
+          <Link
             href="/#how-it-works"
             style={{
               fontSize: '13px',
@@ -134,8 +134,8 @@ export default function Navbar() {
             onMouseOut={(e) => (e.currentTarget.style.color = '#A0A0A0')}
           >
             How it works
-          </a>
-          <a
+          </Link>
+          <Link
             href="/#track"
             style={{
               fontSize: '13px',
@@ -147,7 +147,7 @@ export default function Navbar() {
             onMouseOut={(e) => (e.currentTarget.style.color = '#A0A0A0')}
           >
             Track a Parcel
-          </a>
+          </Link>
         </nav>
 
         {/* Right: Staff Sign-In Button */}
