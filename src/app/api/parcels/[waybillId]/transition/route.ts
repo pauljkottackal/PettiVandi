@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ParcelStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { canTransition, getWhatsAppMessage } from '@/lib/stateMachine'
-import { sendWhatsAppMessage } from '@/lib/whatsapp'
+import { sendWhatsAppMessage, notifyBothParties } from '@/lib/whatsapp'
 
 export async function POST(
   request: NextRequest,
@@ -65,20 +65,19 @@ export async function POST(
       },
     })
 
-    // Send WhatsApp notification if opted in
-    if (parcel.whatsappOptedIn) {
-      const message = getWhatsAppMessage(
-        waybillId,
-        newStatus as ParcelStatus,
-        parcel.trip?.busNumber,
-        parcel.trip?.routeName,
-        parcel.trip?.arrivalDepot
-      )
-      // Fire-and-forget — don't block the response on WhatsApp
-      sendWhatsAppMessage(parcel.receiverPhone, message).catch((err) =>
-        console.error('[WhatsApp] Notification failed:', err)
-      )
-    }
+    // Send WhatsApp notification to BOTH parties by default
+    const message = getWhatsAppMessage(
+      waybillId,
+      newStatus as ParcelStatus,
+      parcel.trip?.busNumber,
+      parcel.trip?.routeName,
+      parcel.trip?.arrivalDepot
+    )
+    notifyBothParties(parcel.senderPhone, parcel.receiverPhone, message).then((res) => {
+      console.log(`[WhatsApp] Status transition ${newStatus} dispatched to both parties:`, res)
+    }).catch((err) =>
+      console.error('[WhatsApp] Transition notification failed:', err)
+    )
 
     return NextResponse.json(updatedParcel)
   } catch (error) {

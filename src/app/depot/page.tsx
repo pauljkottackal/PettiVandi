@@ -40,8 +40,15 @@ export default function DepotPage() {
   const [trips, setTrips] = useState<Trip[]>([])
   const [bookedParcels, setBookedParcels] = useState<Parcel[]>([])
   const [createdParcel, setCreatedParcel] = useState<Parcel | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const handleSelectManifestItem = (parcel: Parcel) => {
+    setCreatedParcel(parcel)
+    setSelectedId(parcel.id)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const [form, setForm] = useState({
     senderName: '',
@@ -449,12 +456,12 @@ export default function DepotPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)', backgroundColor: '#141414' }}>
-                    {['Waybill ID', 'Sender', 'Receiver', 'Weight', 'Route', 'Fare', 'Booked At'].map((h) => (
+                    {['Waybill ID', 'Sender', 'Receiver', 'Weight', 'Route', 'Fare', 'Booked At', 'Bill & Custody'].map((h) => (
                       <th
                         key={h}
                         style={{
-                          textAlign: 'left',
-                          padding: '10px 14px',
+                          textAlign: h === 'Bill & Custody' ? 'right' : 'left',
+                          padding: '12px 14px',
                           fontSize: '10px',
                           fontWeight: 600,
                           color: '#A0A0A0',
@@ -469,40 +476,88 @@ export default function DepotPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bookedParcels.map((p) => (
-                    <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <td
-                        className="font-mono"
+                  {bookedParcels.map((p) => {
+                    const isSelected = p.id === selectedId || p.waybillId === createdParcel?.waybillId
+                    return (
+                      <tr
+                        key={p.id}
+                        onClick={() => handleSelectManifestItem(p)}
                         style={{
-                          padding: '12px 14px',
-                          fontWeight: 700,
-                          color: '#3ECF8E',
-                          letterSpacing: '0.02em',
+                          borderBottom: '1px solid rgba(255,255,255,0.06)',
+                          cursor: 'pointer',
+                          backgroundColor: isSelected ? 'rgba(62, 207, 142, 0.08)' : 'transparent',
+                          transition: 'background-color 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'
                         }}
                       >
-                        {p.waybillId}
-                      </td>
-                      <td style={{ padding: '12px 14px', color: '#EDEDED' }}>{p.senderName}</td>
-                      <td style={{ padding: '12px 14px', color: '#EDEDED' }}>{p.receiverName}</td>
-                      <td className="font-mono" style={{ padding: '12px 14px', color: '#A0A0A0' }}>
-                        {p.weightKg} kg
-                      </td>
-                      <td style={{ padding: '12px 14px', color: '#A0A0A0' }}>{p.trip?.routeName ?? '—'}</td>
-                      <td
-                        className="font-mono"
-                        style={{
-                          padding: '12px 14px',
-                          fontWeight: 600,
-                          color: '#E8820C',
-                        }}
-                      >
-                        ₹{p.calculatedFare.toFixed(2)}
-                      </td>
-                      <td className="font-mono" style={{ padding: '12px 14px', color: '#777777', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                        {new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                    </tr>
-                  ))}
+                        <td
+                          className="font-mono"
+                          style={{
+                            padding: '12px 14px',
+                            fontWeight: 700,
+                            color: '#3ECF8E',
+                            letterSpacing: '0.02em',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span>{p.waybillId}</span>
+                            {isSelected && (
+                              <span style={{ fontSize: '9px', backgroundColor: '#3ECF8E', color: '#0A0A0A', padding: '1px 5px', borderRadius: '3px', fontWeight: 800 }}>
+                                OPEN
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#EDEDED' }}>{p.senderName}</td>
+                        <td style={{ padding: '12px 14px', color: '#EDEDED' }}>{p.receiverName}</td>
+                        <td className="font-mono" style={{ padding: '12px 14px', color: '#A0A0A0' }}>
+                          {p.weightKg} kg
+                        </td>
+                        <td style={{ padding: '12px 14px', color: '#A0A0A0' }}>{p.trip?.routeName ?? '—'}</td>
+                        <td
+                          className="font-mono"
+                          style={{
+                            padding: '12px 14px',
+                            fontWeight: 600,
+                            color: '#E8820C',
+                          }}
+                        >
+                          ₹{p.calculatedFare.toFixed(2)}
+                        </td>
+                        <td className="font-mono" style={{ padding: '12px 14px', color: '#777777', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                          {new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleSelectManifestItem(p)
+                            }}
+                            className="font-mono"
+                            style={{
+                              fontSize: '11px',
+                              padding: '5px 12px',
+                              backgroundColor: isSelected ? '#3ECF8E' : 'rgba(255,255,255,0.06)',
+                              color: isSelected ? '#0A0A0A' : '#EDEDED',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {isSelected ? 'Viewing Slip ✓' : 'View Bill & Slip →'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

@@ -3,6 +3,8 @@ import { ParcelStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { calculateFare } from '@/lib/fareCalculation'
 import { generateWaybillId } from '@/lib/waybill'
+import { sendWhatsAppMessage, notifyBothParties } from '@/lib/whatsapp'
+import { getWhatsAppMessage } from '@/lib/stateMachine'
 
 export async function GET(request: NextRequest) {
   try {
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
         calculatedFare,
         status: ParcelStatus.BOOKED,
         tripId,
+        whatsappOptedIn: true, // Auto opt-in on booking for instant demo delivery
       },
       include: { trip: true },
     })
@@ -75,6 +78,20 @@ export async function POST(request: NextRequest) {
         status: ParcelStatus.BOOKED,
         note: 'Parcel booked at depot counter',
       },
+    })
+
+    // Send instant WhatsApp booking confirmation to BOTH sender and receiver by default
+    const bookingMsg = getWhatsAppMessage(
+      parcel.waybillId,
+      ParcelStatus.BOOKED,
+      trip.busNumber,
+      trip.routeName,
+      trip.arrivalDepot
+    )
+    notifyBothParties(senderPhone, receiverPhone, bookingMsg).then((res) => {
+      console.log(`[WhatsApp] Booking dispatched to both parties:`, res)
+    }).catch((err) => {
+      console.error(`[WhatsApp] Booking dispatch error:`, err)
     })
 
     return NextResponse.json(parcel, { status: 201 })

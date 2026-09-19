@@ -100,14 +100,16 @@ export function getWhatsAppMessage(
   arrivalDepot?: string,
 ): string {
   switch (newStatus) {
+    case ParcelStatus.BOOKED:
+      return `📦 *KSRTC PettiVandi*: Consignment *${waybillId}* booked at depot counter.\nRoute: ${routeName ?? "KSRTC Bus"}\nAssigned Bus: ${busNumber ?? "Scheduled"}\nDestination: ${arrivalDepot ?? "Arrival Depot"}\n\nTrack your parcel live at: http://localhost:3000/track?id=${waybillId}`;
     case ParcelStatus.LOADED:
-      return `Your KSRTC parcel ${waybillId} has been loaded onto bus ${busNumber ?? "N/A"}, en route ${routeName ?? ""}. We'll update you when it arrives.`;
+      return `🚌 *KSRTC PettiVandi*: Your parcel *${waybillId}* has been loaded into the luggage hold of bus ${busNumber ?? "N/A"} (${routeName ?? ""}). We'll notify you on arrival.`;
     case ParcelStatus.IN_TRANSIT:
-      return `Your KSRTC parcel ${waybillId} is now in transit on bus ${busNumber ?? "N/A"} (${routeName ?? ""}). Expected at ${arrivalDepot ?? "destination depot"} soon.`;
+      return `🛣 *KSRTC PettiVandi*: Your parcel *${waybillId}* is now in transit on bus ${busNumber ?? "N/A"}. Destination depot: ${arrivalDepot ?? "Arrival Depot"}.`;
     case ParcelStatus.UNLOADED:
-      return `Your KSRTC parcel ${waybillId} has been unloaded at ${arrivalDepot ?? "the destination depot"}. It is ready for collection. Please bring a valid ID and your waybill number.`;
+      return `🏢 *KSRTC PettiVandi*: Your parcel *${waybillId}* has arrived and is unloaded at ${arrivalDepot ?? "destination depot"}. Ready for collection! Bring valid ID and waybill number.`;
     case ParcelStatus.CLAIMED:
-      return `Your KSRTC parcel ${waybillId} has been collected. Thank you for using KSRTC PettiVandi parcel service.`;
+      return `✓ *KSRTC PettiVandi*: Parcel *${waybillId}* has been collected. Thank you for using KSRTC state bus parcel service.`;
     default:
       return `Update on your KSRTC parcel ${waybillId}: status is now ${STATUS_LABELS[newStatus]}.`;
   }

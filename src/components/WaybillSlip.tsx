@@ -29,6 +29,8 @@ export default function WaybillSlip({ parcel }: WaybillSlipProps) {
   const [screenQr, setScreenQr] = useState<string>('')
   // Print QR (ultra high-res 512px for 80mm thermal/label printers)
   const [printQr, setPrintQr] = useState<string>('')
+  // View mode switcher: allows reviewing exact 80mm print fidelity on screen
+  const [viewMode, setViewMode] = useState<'screen' | 'thermal_preview'>('screen')
 
   useEffect(() => {
     // Screen display QR
@@ -38,7 +40,7 @@ export default function WaybillSlip({ parcel }: WaybillSlipProps) {
       color: { dark: '#0A0A0A', light: '#FFFFFF' },
     }).then(setScreenQr)
 
-    // Ultra high-res print QR (512px rendered down to ~32mm = ~400 DPI sharpness)
+    // Ultra high-res print QR (512px rendered down to 32mm = ~400 DPI sharpness)
     QRCode.toDataURL(parcel.waybillId, {
       width: 512,
       margin: 1,
@@ -58,6 +60,143 @@ export default function WaybillSlip({ parcel }: WaybillSlipProps) {
     hour: '2-digit',
     minute: '2-digit',
   })
+
+  // Reusable 80mm x 130mm Thermal Slip Body (shared between screen thermal preview and actual @media print)
+  const renderThermalSlipBody = () => (
+    <>
+      {/* Header with KSRTC Wordmark & Badging */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1.5px solid #000000', paddingBottom: '2mm' }}>
+        <div>
+          <div style={{ fontSize: '8pt', fontWeight: 800, letterSpacing: '0.08em', lineHeight: 1, color: '#000000' }}>
+            KSRTC PETTIVANDI
+          </div>
+          <div style={{ fontSize: '6.5pt', fontWeight: 600, letterSpacing: '0.04em', color: '#000000' }}>
+            STATE BUS PARCEL SERVICE
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <span style={{ fontSize: '7pt', fontWeight: 700, border: '1px solid #000000', padding: '1px 3px', color: '#000000' }}>
+            CONSIGNMENT
+          </span>
+        </div>
+      </div>
+
+      {/* Big High-Contrast Waybill Box */}
+      <div
+        style={{
+          border: '2px solid #000000',
+          textAlign: 'center',
+          padding: '2mm 1mm',
+          backgroundColor: '#FFFFFF',
+          margin: '2mm 0',
+        }}
+      >
+        <div style={{ fontSize: '6.5pt', fontWeight: 700, letterSpacing: '0.12em', marginBottom: '1mm', color: '#000000' }}>
+          WAYBILL NUMBER
+        </div>
+        <div
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: '15pt',
+            fontWeight: 900,
+            letterSpacing: '0.06em',
+            lineHeight: 1,
+            color: '#000000',
+          }}
+        >
+          {parcel.waybillId}
+        </div>
+      </div>
+
+      {/* High-Resolution QR Code (32mm x 32mm scaled from 512px source) */}
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '1.5mm 0' }}>
+        {printQr ? (
+          <img
+            src={printQr}
+            alt={parcel.waybillId}
+            style={{
+              width: '32mm',
+              height: '32mm',
+              display: 'block',
+              imageRendering: 'pixelated',
+            }}
+          />
+        ) : (
+          <div style={{ width: '32mm', height: '32mm', border: '1px solid #000000' }} />
+        )}
+      </div>
+
+      {/* Route Corridor Box */}
+      <div
+        style={{
+          border: '1.2px solid #000000',
+          padding: '2mm 2.5mm',
+          backgroundColor: '#FFFFFF',
+          margin: '1mm 0',
+          color: '#000000',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1mm' }}>
+          <span style={{ fontSize: '6.5pt', fontWeight: 800, letterSpacing: '0.08em', color: '#000000' }}>
+            TRANSIT ROUTE &amp; SCHEDULE
+          </span>
+          <span style={{ fontSize: '7pt', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: '#000000' }}>
+            {parcel.trip.distanceKm} KM
+          </span>
+        </div>
+        <div style={{ fontSize: '8.5pt', fontWeight: 800, lineHeight: 1.1, color: '#000000' }}>
+          {parcel.trip.departureDepot}
+        </div>
+        <div style={{ fontSize: '7pt', fontWeight: 700, margin: '0.5mm 0', color: '#000000' }}>
+          ↓ En route bus: {parcel.trip.busNumber}
+        </div>
+        <div style={{ fontSize: '8.5pt', fontWeight: 800, lineHeight: 1.1, color: '#000000' }}>
+          {parcel.trip.arrivalDepot}
+        </div>
+        <div style={{ fontSize: '6.5pt', fontFamily: "'JetBrains Mono', monospace", marginTop: '1mm', color: '#000000' }}>
+          DEP: {deptDate}
+        </div>
+      </div>
+
+      {/* Consignment Details Table */}
+      <div style={{ borderTop: '1.2px solid #000000', borderBottom: '1.2px solid #000000', padding: '1mm 0', margin: '1mm 0', color: '#000000' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5mm', fontSize: '7pt' }}>
+          <div>
+            <span style={{ fontSize: '6pt', fontWeight: 600, color: '#000000', display: 'block' }}>SENDER:</span>
+            <strong style={{ fontSize: '7.5pt', color: '#000000' }}>{parcel.senderName}</strong>
+          </div>
+          <div>
+            <span style={{ fontSize: '6pt', fontWeight: 600, color: '#000000', display: 'block' }}>RECEIVER:</span>
+            <strong style={{ fontSize: '7.5pt', color: '#000000' }}>{parcel.receiverName}</strong>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5mm', paddingTop: '1mm', borderTop: '0.8px dashed #000000', alignItems: 'baseline' }}>
+          <div>
+            <span style={{ fontSize: '6pt', fontWeight: 600, marginRight: '1mm', color: '#000000' }}>WEIGHT:</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '8.5pt', color: '#000000' }}>
+              {parcel.weightKg} KG
+            </span>
+          </div>
+          <div>
+            <span style={{ fontSize: '6pt', fontWeight: 600, marginRight: '1mm', color: '#000000' }}>FARE (PAID):</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 900, fontSize: '10pt', color: '#000000' }}>
+              ₹{parcel.calculatedFare.toFixed(2)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Security / Verification Footer */}
+      <div style={{ textAlign: 'center', paddingTop: '1mm', color: '#000000' }}>
+        <div style={{ fontSize: '5.5pt', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600, color: '#000000' }}>
+          PRESENT ID &amp; WAYBILL FOR CLAIM AT DESTINATION DEPOT
+        </div>
+        <div style={{ fontSize: '5pt', color: '#000000', marginTop: '0.5mm' }}>
+          KERALA STATE ROAD TRANSPORT CORPORATION · OFFICIAL CONSIGNMENT TAG
+        </div>
+      </div>
+    </>
+  )
 
   return (
     <div>
@@ -132,144 +271,208 @@ export default function WaybillSlip({ parcel }: WaybillSlipProps) {
       `}</style>
 
       {/* ========================================================================= */}
-      {/* 1. ON-SCREEN PREVIEW (Supabase Dark Theme)                                */}
+      {/* 1. ON-SCREEN DISPLAY (Allows switching between Dark UI & 80mm Print Fidelity) */}
       {/* ========================================================================= */}
       <div className="screen-only">
-        <div
-          style={{
-            backgroundColor: '#1C1C1C',
-            color: '#EDEDED',
-            width: '320px',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: '8px',
-            padding: '20px',
-            fontFamily: 'var(--font-sans)',
-            boxSizing: 'border-box',
-          }}
-        >
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <BusLogo size={22} color="#3ECF8E" />
-              <div>
-                <div style={{ fontSize: '10px', color: '#3ECF8E', fontWeight: 700, letterSpacing: '0.1em' }}>KSRTC</div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: '#EDEDED', lineHeight: 1 }}>PettiVandi</div>
-              </div>
-            </div>
-            <div
-              className="font-mono"
-              style={{
-                fontSize: '9px',
-                color: '#A0A0A0',
-                border: '1px solid rgba(255,255,255,0.12)',
-                padding: '2px 6px',
-                borderRadius: '3px',
-              }}
-            >
-              PARCEL WAYBILL
-            </div>
-          </div>
-
-          {/* Waybill ID Hero */}
-          <div
+        {/* Toggle Switcher */}
+        <div className="no-print" style={{ display: 'flex', gap: '8px', width: '320px', marginBottom: '12px' }}>
+          <button
+            type="button"
+            onClick={() => setViewMode('screen')}
             style={{
-              backgroundColor: '#141414',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '6px',
-              padding: '10px 8px',
-              marginBottom: '14px',
-              textAlign: 'center',
+              flex: 1,
+              padding: '6px',
+              backgroundColor: viewMode === 'screen' ? '#3ECF8E' : '#141414',
+              color: viewMode === 'screen' ? '#0A0A0A' : '#A0A0A0',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
             }}
           >
-            <div style={{ fontSize: '9px', color: '#A0A0A0', letterSpacing: '0.15em', marginBottom: '3px' }}>
-              CONSIGNMENT WAYBILL
-            </div>
-            <div
-              className="font-mono"
-              style={{
-                fontSize: '22px',
-                fontWeight: 700,
-                letterSpacing: '0.04em',
-                color: '#3ECF8E',
-              }}
-            >
-              {parcel.waybillId}
-            </div>
-          </div>
-
-          {/* Screen QR Code */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
-            {screenQr ? (
-              <div style={{ backgroundColor: '#FFFFFF', padding: '6px', borderRadius: '6px' }}>
-                <img
-                  src={screenQr}
-                  alt={`QR for ${parcel.waybillId}`}
-                  style={{ display: 'block', width: '115px', height: '115px' }}
-                />
-              </div>
-            ) : (
-              <div style={{ width: '127px', height: '127px', backgroundColor: '#141414', borderRadius: '6px' }} />
-            )}
-          </div>
-
-          {/* Route Section */}
-          <div
+            Dark Console Slip
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('thermal_preview')}
             style={{
-              backgroundColor: '#141414',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '6px',
-              padding: '10px 12px',
-              marginBottom: '12px',
+              flex: 1,
+              padding: '6px',
+              backgroundColor: viewMode === 'thermal_preview' ? '#3ECF8E' : '#141414',
+              color: viewMode === 'thermal_preview' ? '#0A0A0A' : '#A0A0A0',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '4px',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <div style={{ fontSize: '9px', color: '#A0A0A0', letterSpacing: '0.08em' }}>TRANSIT CORRIDOR</div>
-              <BusTransitIcon size={22} color="#3ECF8E" />
-            </div>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: '#EDEDED' }}>{parcel.trip.routeName}</div>
-            <div className="font-mono" style={{ fontSize: '11px', color: '#E8820C', marginTop: '3px', fontWeight: 500 }}>
-              Bus: {parcel.trip.busNumber} · {parcel.trip.distanceKm} km
-            </div>
-            <div className="font-mono" style={{ fontSize: '10px', color: '#A0A0A0', marginTop: '2px' }}>
-              Dep: {deptDate}
-            </div>
-          </div>
+            80mm Thermal Print
+          </button>
+        </div>
 
-          {/* Details Table */}
-          <div style={{ fontSize: '11px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-            {[
-              ['SENDER', parcel.senderName, false],
-              ['RECEIVER', parcel.receiverName, false],
-              ['WEIGHT', `${parcel.weightKg} kg`, true],
-              ['FARE', `₹${parcel.calculatedFare.toFixed(2)}`, true],
-            ].map(([label, value, isMono]) => (
+        {/* MODE A: Dark Console Preview */}
+        {viewMode === 'screen' ? (
+          <div
+            style={{
+              backgroundColor: '#1C1C1C',
+              color: '#EDEDED',
+              width: '320px',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '8px',
+              padding: '20px',
+              fontFamily: 'var(--font-sans)',
+              boxSizing: 'border-box',
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BusLogo size={22} color="#3ECF8E" />
+                <div>
+                  <div style={{ fontSize: '10px', color: '#3ECF8E', fontWeight: 700, letterSpacing: '0.1em' }}>KSRTC</div>
+                  <div style={{ fontSize: '16px', fontWeight: 700, color: '#EDEDED', lineHeight: 1 }}>PettiVandi</div>
+                </div>
+              </div>
               <div
-                key={label as string}
+                className="font-mono"
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  padding: '6px 0',
-                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '9px',
+                  color: '#A0A0A0',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
                 }}
               >
-                <span style={{ color: '#A0A0A0', letterSpacing: '0.06em', fontSize: '10px' }}>{label}</span>
-                <span
-                  className={isMono ? 'font-mono' : ''}
+                PARCEL WAYBILL
+              </div>
+            </div>
+
+            {/* Waybill ID Hero */}
+            <div
+              style={{
+                backgroundColor: '#141414',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '6px',
+                padding: '10px 8px',
+                marginBottom: '14px',
+                textAlign: 'center',
+              }}
+            >
+              <div style={{ fontSize: '9px', color: '#A0A0A0', letterSpacing: '0.15em', marginBottom: '3px' }}>
+                CONSIGNMENT WAYBILL
+              </div>
+              <div
+                className="font-mono"
+                style={{
+                  fontSize: '22px',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  color: '#3ECF8E',
+                }}
+              >
+                {parcel.waybillId}
+              </div>
+            </div>
+
+            {/* Screen QR Code */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+              {screenQr ? (
+                <div style={{ backgroundColor: '#FFFFFF', padding: '6px', borderRadius: '6px' }}>
+                  <img
+                    src={screenQr}
+                    alt={`QR for ${parcel.waybillId}`}
+                    style={{ display: 'block', width: '115px', height: '115px' }}
+                  />
+                </div>
+              ) : (
+                <div style={{ width: '127px', height: '127px', backgroundColor: '#141414', borderRadius: '6px' }} />
+              )}
+            </div>
+
+            {/* Route Section */}
+            <div
+              style={{
+                backgroundColor: '#141414',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '6px',
+                padding: '10px 12px',
+                marginBottom: '12px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <div style={{ fontSize: '9px', color: '#A0A0A0', letterSpacing: '0.08em' }}>TRANSIT CORRIDOR</div>
+                <BusTransitIcon size={22} color="#3ECF8E" />
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#EDEDED' }}>{parcel.trip.routeName}</div>
+              <div className="font-mono" style={{ fontSize: '11px', color: '#E8820C', marginTop: '3px', fontWeight: 500 }}>
+                Bus: {parcel.trip.busNumber} · {parcel.trip.distanceKm} km
+              </div>
+              <div className="font-mono" style={{ fontSize: '10px', color: '#A0A0A0', marginTop: '2px' }}>
+                Dep: {deptDate}
+              </div>
+            </div>
+
+            {/* Details Table */}
+            <div style={{ fontSize: '11px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              {[
+                ['SENDER', parcel.senderName, false],
+                ['RECEIVER', parcel.receiverName, false],
+                ['WEIGHT', `${parcel.weightKg} kg`, true],
+                ['FARE', `₹${parcel.calculatedFare.toFixed(2)}`, true],
+              ].map(([label, value, isMono]) => (
+                <div
+                  key={label as string}
                   style={{
-                    fontWeight: 600,
-                    color: label === 'FARE' ? '#E8820C' : '#EDEDED',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '6px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.06)',
                   }}
                 >
-                  {value}
-                </span>
-              </div>
-            ))}
-          </div>
+                  <span style={{ color: '#A0A0A0', letterSpacing: '0.06em', fontSize: '10px' }}>{label}</span>
+                  <span
+                    className={isMono ? 'font-mono' : ''}
+                    style={{
+                      fontWeight: 600,
+                      color: label === 'FARE' ? '#E8820C' : '#EDEDED',
+                    }}
+                  >
+                    {value}
+                  </span>
+                </div>
+              ))}
+            </div>
 
-          <div style={{ marginTop: '10px', textAlign: 'center', fontSize: '9px', color: '#777777' }}>
-            Kerala State Road Transport Corporation · Courier Tag
+            <div style={{ marginTop: '10px', textAlign: 'center', fontSize: '9px', color: '#777777' }}>
+              Kerala State Road Transport Corporation · Courier Tag
+            </div>
           </div>
-        </div>
+        ) : (
+          /* MODE B: 80mm x 130mm Thermal Print Fidelity Preview (Pure White & Solid Black) */
+          <div
+            style={{
+              width: '80mm',
+              height: '130mm',
+              backgroundColor: '#FFFFFF',
+              color: '#000000',
+              border: '2px solid #000000',
+              boxSizing: 'border-box',
+              padding: '4.5mm 5mm',
+              fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              boxShadow: '0 12px 36px rgba(0,0,0,0.7)',
+              margin: '0 auto',
+            }}
+          >
+            {renderThermalSlipBody()}
+          </div>
+        )}
 
         {/* Print Button */}
         <button
@@ -290,7 +493,8 @@ export default function WaybillSlip({ parcel }: WaybillSlipProps) {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            width: '320px',
+            width: viewMode === 'thermal_preview' ? '80mm' : '320px',
+            margin: viewMode === 'thermal_preview' ? '12px auto 0' : '12px 0 0',
           }}
         >
           <span>🖨</span> Print Official 80mm Slip
@@ -298,137 +502,10 @@ export default function WaybillSlip({ parcel }: WaybillSlipProps) {
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. DEDICATED PRINT SLIP (Strictly 80mm x 130mm, 100% High-Contrast B&W)  */}
+      {/* 2. DEDICATED PRINT SLIP (Strictly 80mm x 130mm for @media print)         */}
       {/* ========================================================================= */}
       <div className="print-slip-root print-only">
-        {/* Header with KSRTC Wordmark & Mini Bus Icon */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1.5px solid #000000', paddingBottom: '2mm' }}>
-          <div>
-            <div style={{ fontSize: '8pt', fontWeight: 800, letterSpacing: '0.08em', lineHeight: 1 }}>
-              KSRTC PETTIVANDI
-            </div>
-            <div style={{ fontSize: '6.5pt', fontWeight: 600, letterSpacing: '0.04em', color: '#000000' }}>
-              STATE BUS PARCEL SERVICE
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <span style={{ fontSize: '7pt', fontWeight: 700, border: '1px solid #000000', padding: '1px 3px' }}>
-              CONSIGNMENT
-            </span>
-          </div>
-        </div>
-
-        {/* Big High-Contrast Waybill Box */}
-        <div
-          style={{
-            border: '2px solid #000000',
-            textAlign: 'center',
-            padding: '2mm 1mm',
-            backgroundColor: '#FFFFFF',
-            margin: '2mm 0',
-          }}
-        >
-          <div style={{ fontSize: '6.5pt', fontWeight: 700, letterSpacing: '0.12em', marginBottom: '1mm' }}>
-            WAYBILL NUMBER
-          </div>
-          <div
-            style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '15pt',
-              fontWeight: 900,
-              letterSpacing: '0.06em',
-              lineHeight: 1,
-              color: '#000000',
-            }}
-          >
-            {parcel.waybillId}
-          </div>
-        </div>
-
-        {/* High-Resolution QR Code (32mm x 32mm scaled from 512px source) */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', margin: '1.5mm 0' }}>
-          {printQr ? (
-            <img
-              src={printQr}
-              alt={parcel.waybillId}
-              style={{
-                width: '32mm',
-                height: '32mm',
-                display: 'block',
-                imageRendering: 'pixelated',
-              }}
-            />
-          ) : (
-            <div style={{ width: '32mm', height: '32mm', border: '1px solid #000000' }} />
-          )}
-        </div>
-
-        {/* Route Corridor Box */}
-        <div
-          style={{
-            border: '1.2px solid #000000',
-            padding: '2mm 2.5mm',
-            backgroundColor: '#FFFFFF',
-            margin: '1mm 0',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1mm' }}>
-            <span style={{ fontSize: '6.5pt', fontWeight: 800, letterSpacing: '0.08em' }}>ROUTE &amp; SCHEDULE</span>
-            <span style={{ fontSize: '7pt', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
-              {parcel.trip.distanceKm} KM
-            </span>
-          </div>
-          <div style={{ fontSize: '8.5pt', fontWeight: 800, lineHeight: 1.1 }}>
-            {parcel.trip.departureDepot}
-          </div>
-          <div style={{ fontSize: '7pt', fontWeight: 700, margin: '0.5mm 0', color: '#000000' }}>
-            ↓ En route bus: {parcel.trip.busNumber}
-          </div>
-          <div style={{ fontSize: '8.5pt', fontWeight: 800, lineHeight: 1.1 }}>
-            {parcel.trip.arrivalDepot}
-          </div>
-          <div style={{ fontSize: '6.5pt', fontFamily: "'JetBrains Mono', monospace", marginTop: '1mm', color: '#000000' }}>
-            DEP: {deptDate}
-          </div>
-        </div>
-
-        {/* Consignment Details Table */}
-        <div style={{ borderTop: '1.2px solid #000000', borderBottom: '1.2px solid #000000', padding: '1mm 0', margin: '1mm 0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5mm', fontSize: '7pt' }}>
-            <div>
-              <span style={{ fontSize: '6pt', fontWeight: 600, color: '#000000', display: 'block' }}>SENDER:</span>
-              <strong style={{ fontSize: '7.5pt' }}>{parcel.senderName}</strong>
-            </div>
-            <div>
-              <span style={{ fontSize: '6pt', fontWeight: 600, color: '#000000', display: 'block' }}>RECEIVER:</span>
-              <strong style={{ fontSize: '7.5pt' }}>{parcel.receiverName}</strong>
-            </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5mm', paddingTop: '1mm', borderTop: '0.8px dashed #000000', alignItems: 'baseline' }}>
-            <div>
-              <span style={{ fontSize: '6pt', fontWeight: 600, marginRight: '1mm' }}>WEIGHT:</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: '8.5pt' }}>
-                {parcel.weightKg} KG
-              </span>
-            </div>
-            <div>
-              <span style={{ fontSize: '6pt', fontWeight: 600, marginRight: '1mm' }}>FARE (PAID):</span>
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 900, fontSize: '10pt' }}>
-                ₹{parcel.calculatedFare.toFixed(2)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Security / Verification Footer */}
-        <div style={{ textAlign: 'center', paddingTop: '1mm' }}>
-          <div style={{ fontSize: '5.5pt', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>
-            PRESENT ID &amp; WAYBILL FOR CLAIM AT DESTINATION DEPOT
-          </div>
-          <div style={{ fontSize: '5pt', color: '#000000', marginTop: '0.5mm' }}>
-            KERALA STATE ROAD TRANSPORT CORPORATION · OFFICIAL CONSIGNMENT TAG
-          </div>
-        </div>
+        {renderThermalSlipBody()}
       </div>
     </div>
   )
