@@ -74,11 +74,11 @@ Senders and recipients track parcel movement across transit hubs with a visual s
 ```mermaid
 flowchart TD
     subgraph Senders_Receivers ["Citizen & Customers"]
-        A["Citizen Web Portal /track"] -->|Lookup Waybill| API_Track["/api/parcels/[waybillId]"]
-        WA_App["WhatsApp Mobile App"] <---|Official Receipts & Transit Alerts| WA_Engine["WhatsApp Service"]
+        A["Citizen Web Portal (/track)"] -->|Lookup Waybill| API_Track["GET /api/parcels/:waybillId"]
+        WA_Engine["WhatsApp Service"] -->|Official Receipts & Alerts| WA_App["WhatsApp Mobile App"]
     end
 
-    subgraph Depot_Counter ["Depot Counter"]
+    subgraph Depot_Counter ["Depot Counter Terminal"]
         D1["Consignment Intake Form"] -->|Compute Fare| Fare_Calc["Tariff Calculator"]
         D1 -->|Create Parcel| API_Parcels["POST /api/parcels"]
         API_Parcels --> Slip["80mm Thermal Waybill Slip with QR"]
@@ -87,8 +87,8 @@ flowchart TD
 
     subgraph Conductor_Enroute ["En-route Bus Conductor"]
         C1["HTML5 Camera QR Scanner"] -->|Read Waybill QR| SM["State Machine Validator"]
-        SM -->|Online| API_Transition["POST /api/parcels/[id]/transition"]
-        SM -->|Offline (Ghats)| Offline_Queue["localStorage Sync Queue"]
+        SM -->|Online| API_Transition["POST /api/parcels/:id/transition"]
+        SM -->|Offline - Ghats Corridor| Offline_Queue["localStorage Sync Queue"]
         Offline_Queue -->|Auto Retry on Reconnect| API_Transition
     end
 
@@ -96,7 +96,7 @@ flowchart TD
         API_Parcels --> Prisma["Prisma ORM"]
         API_Transition --> Prisma
         API_Track --> Prisma
-        Prisma --> DB[("PostgreSQL Database")]
+        Prisma --> DB[(PostgreSQL Database)]
         API_Transition --> WA_Engine
     end
 ```
