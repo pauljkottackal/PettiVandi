@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { enqueue, flush, getQueueCount, QueueItem } from '@/lib/offlineQueue'
+import { BusLogo, BusTransitIcon } from '@/components/BusIcons'
 
 const QRScanner = dynamic(() => import('@/components/QRScanner'), { ssr: false })
 
@@ -17,18 +18,18 @@ type ScanState =
   | { type: 'success'; waybillId: string; newStatus: string }
 
 const STATUS_LABELS: Record<string, string> = {
-  BOOKED: 'Booked',
-  LOADED: 'Loaded onto Bus',
-  IN_TRANSIT: 'In Transit',
+  BOOKED: 'Booked at Depot',
+  LOADED: 'Loaded into Hold',
+  IN_TRANSIT: 'In Transit on Route',
   UNLOADED: 'Unloaded at Destination',
-  CLAIMED: 'Claimed',
+  CLAIMED: 'Claimed by Receiver',
 }
 
 const ACTION_LABELS: Record<string, string> = {
-  BOOKED: 'Confirm Loaded',
-  LOADED: 'Confirm In Transit',
-  IN_TRANSIT: 'Confirm Unloaded',
-  UNLOADED: 'Confirm Claimed',
+  BOOKED: 'Confirm Loaded onto Bus',
+  LOADED: 'Confirm Departure (In Transit)',
+  IN_TRANSIT: 'Confirm Unloaded at Depot',
+  UNLOADED: 'Confirm Receiver Claim',
 }
 
 const NEXT_STATUS: Record<string, string> = {
@@ -109,7 +110,12 @@ export default function ConductorPage() {
       const nextStatus = NEXT_STATUS[parcel.status]
 
       if (!nextStatus) {
-        setScanState({ type: 'invalid_transition', waybillId, status: parcel.status, message: `This parcel is already ${STATUS_LABELS[parcel.status] ?? parcel.status} — nothing left to do.` })
+        setScanState({
+          type: 'invalid_transition',
+          waybillId,
+          status: parcel.status,
+          message: `This parcel is already at terminal state (${STATUS_LABELS[parcel.status] ?? parcel.status}) — no further transitions possible.`,
+        })
         return
       }
 
@@ -172,66 +178,155 @@ export default function ConductorPage() {
   const resetScan = useCallback(() => {
     setScanState({ type: 'idle' })
     setScanning(true)
+    setManualId('')
   }, [])
 
-  const bg = '#111111'
-  const textColor = '#F5F2EE'
-
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: bg, color: textColor, display: 'flex', flexDirection: 'column', fontFamily: 'IBM Plex Sans, sans-serif', maxWidth: '480px', margin: '0 auto' }}>
-      {/* Top bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #222' }}>
-        <a href="/" style={{ color: '#7A8694', fontSize: '13px', textDecoration: 'none' }}>← Home</a>
-        <span style={{ fontSize: '13px', fontWeight: 600, color: '#F5F2EE' }}>Conductor</span>
+    <div
+      style={{
+        minHeight: '100vh',
+        backgroundColor: '#0A0A0A',
+        color: '#EDEDED',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: 'var(--font-sans)',
+        maxWidth: '520px',
+        margin: '0 auto',
+        borderLeft: '1px solid rgba(255,255,255,0.06)',
+        borderRight: '1px solid rgba(255,255,255,0.06)',
+      }}
+    >
+      {/* Top Header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '14px 18px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          backgroundColor: '#0A0A0A',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <BusLogo size={20} color="#3ECF8E" />
+          <span style={{ fontSize: '13px', fontWeight: 700, color: '#EDEDED' }}>Conductor Mobile Scanner</span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {queueCount > 0 && (
             <button
               onClick={handleSync}
-              style={{ fontSize: '11px', fontWeight: 600, backgroundColor: '#E8820C', color: 'white', border: 'none', padding: '4px 10px', cursor: 'pointer', borderRadius: '2px' }}
+              className="font-mono"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                backgroundColor: '#E8820C',
+                color: '#0A0A0A',
+                border: 'none',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
             >
-              Sync {queueCount}
+              Sync ({queueCount})
             </button>
           )}
+          <a href="/" style={{ color: '#A0A0A0', fontSize: '12px', textDecoration: 'none' }}>
+            Exit
+          </a>
         </div>
       </div>
 
-      {/* Sync results toast */}
+      {/* Sync Results Toast */}
       {syncResults.length > 0 && (
-        <div style={{ padding: '8px 16px', backgroundColor: '#1a2a1a', fontSize: '11px', color: '#6edb71', borderBottom: '1px solid #222' }}>
-          {syncResults.map((r, i) => <div key={i}>{r}</div>)}
+        <div
+          className="font-mono"
+          style={{
+            padding: '8px 16px',
+            backgroundColor: '#12241A',
+            fontSize: '11px',
+            color: '#3ECF8E',
+            borderBottom: '1px solid rgba(62,207,142,0.2)',
+          }}
+        >
+          {syncResults.map((r, i) => (
+            <div key={i}>{r}</div>
+          ))}
         </div>
       )}
 
-      {/* Camera area */}
-      <div style={{ flex: '0 0 60vh', position: 'relative', backgroundColor: '#000', overflow: 'hidden' }}>
+      {/* Camera Viewfinder (60vh) */}
+      <div style={{ flex: '0 0 52vh', position: 'relative', backgroundColor: '#000000', overflow: 'hidden' }}>
         {scanning ? (
           <QRScanner onScan={handleScan} active={scanning} />
         ) : (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' }}>
-            <div style={{ textAlign: 'center', color: '#7A8694' }}>
-              <div style={{ fontSize: '48px', marginBottom: '8px' }}>📦</div>
-              <div style={{ fontSize: '13px' }}>Camera paused</div>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#141414',
+            }}
+          >
+            <div style={{ textAlign: 'center', color: '#A0A0A0' }}>
+              <BusTransitIcon size={48} color="#3ECF8E" />
+              <div className="font-mono" style={{ fontSize: '12px', marginTop: '8px' }}>
+                Camera Paused
+              </div>
             </div>
           </div>
         )}
 
-        {/* Scanning overlay — crosshair */}
+        {/* Crosshair Overlay */}
         {scanning && scanState.type === 'idle' && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ width: '200px', height: '200px', border: '2px solid #E8820C', opacity: 0.8 }} />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <div
+              style={{
+                width: '210px',
+                height: '210px',
+                border: '2px solid #3ECF8E',
+                borderRadius: '8px',
+                opacity: 0.85,
+              }}
+            />
           </div>
         )}
       </div>
 
-      {/* Action panel — bottom */}
-      <div style={{ flex: 1, padding: '20px 16px 32px', display: 'flex', flexDirection: 'column', gap: '12px', minHeight: '200px' }}>
-
+      {/* Action & Status Transition Panel */}
+      <div
+        style={{
+          flex: 1,
+          padding: '20px 18px 32px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          backgroundColor: '#141414',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+        }}
+      >
+        {/* IDLE STATE */}
         {scanState.type === 'idle' && (
-          <div style={{ textAlign: 'center', paddingTop: '10px' }}>
-            <div style={{ fontSize: '13px', color: '#7A8694', marginBottom: '12px' }}>Point camera at waybill QR code</div>
-            <div style={{ display: 'flex', gap: '8px', maxWidth: '320px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', paddingTop: '8px' }}>
+            <div style={{ fontSize: '13px', color: '#A0A0A0', marginBottom: '14px' }}>
+              Align waybill QR code inside camera view
+            </div>
+
+            {/* Manual Entry Fallback for Desktop Demos */}
+            <div style={{ display: 'flex', gap: '8px', maxWidth: '340px', margin: '0 auto' }}>
               <input
-                placeholder="Or type Waybill ID (e.g. PV-2026-...)"
+                className="pv-input font-mono"
+                placeholder="Or enter Waybill ID manually"
                 value={manualId}
                 onChange={(e) => setManualId(e.target.value)}
                 onKeyDown={(e) => {
@@ -239,16 +334,7 @@ export default function ConductorPage() {
                     handleScan(manualId.trim())
                   }
                 }}
-                style={{
-                  flex: 1,
-                  padding: '9px 12px',
-                  backgroundColor: '#222',
-                  border: '1px solid #444',
-                  color: '#FFF',
-                  fontSize: '12px',
-                  fontFamily: 'IBM Plex Sans, sans-serif',
-                  outline: 'none',
-                }}
+                style={{ fontSize: '12px', padding: '9px 12px' }}
               />
               <button
                 type="button"
@@ -257,115 +343,302 @@ export default function ConductorPage() {
                 }}
                 style={{
                   padding: '9px 14px',
-                  backgroundColor: '#E8820C',
-                  color: 'white',
+                  backgroundColor: '#3ECF8E',
+                  color: '#0A0A0A',
                   border: 'none',
+                  borderRadius: '6px',
                   fontWeight: 700,
                   fontSize: '12px',
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                Lookup
+                Inspect
               </button>
             </div>
           </div>
         )}
 
+        {/* LOADING STATE */}
         {scanState.type === 'loading' && (
           <div style={{ textAlign: 'center', paddingTop: '16px' }}>
-            <div style={{ fontSize: '14px', color: '#7A8694' }}>Looking up <span style={{ color: '#F5F2EE', fontVariantNumeric: 'tabular-nums' }}>{scanState.waybillId}</span>…</div>
+            <div className="font-mono" style={{ fontSize: '13px', color: '#3ECF8E' }}>
+              Validating custody state for {scanState.waybillId}…
+            </div>
           </div>
         )}
 
+        {/* READY STATE: Only Single Valid State Machine Action Button */}
         {scanState.type === 'ready' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-            <div>
-              <div style={{ fontSize: '11px', color: '#7A8694', letterSpacing: '0.1em', marginBottom: '2px' }}>SCANNED</div>
-              <div style={{ fontSize: '20px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#F5F2EE' }}>{scanState.waybillId}</div>
-              <div style={{ fontSize: '13px', color: '#7A8694', marginTop: '4px' }}>{scanState.routeName} · Bus {scanState.busNumber}</div>
+            <div
+              style={{
+                backgroundColor: '#1C1C1C',
+                padding: '14px',
+                borderRadius: '6px',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <div style={{ fontSize: '10px', color: '#A0A0A0', letterSpacing: '0.1em' }}>SCANNED WAYBILL</div>
+              <div className="font-mono" style={{ fontSize: '20px', fontWeight: 700, color: '#3ECF8E', marginTop: '2px' }}>
+                {scanState.waybillId}
+              </div>
+              <div style={{ fontSize: '12px', color: '#EDEDED', marginTop: '4px' }}>
+                {scanState.routeName} · Bus {scanState.busNumber}
+              </div>
+              <div className="font-mono" style={{ fontSize: '11px', color: '#E8820C', marginTop: '4px' }}>
+                CURRENT: {STATUS_LABELS[scanState.currentStatus] ?? scanState.currentStatus}
+              </div>
             </div>
-            <div style={{ fontSize: '12px', color: '#7A8694' }}>Current: <span style={{ color: '#F5F2EE' }}>{STATUS_LABELS[scanState.currentStatus]}</span></div>
 
             <div style={{ flex: 1 }} />
 
+            {/* Single Action Button */}
             <button
               onClick={handleTransition}
               disabled={transitioning}
               style={{
-                padding: '18px', backgroundColor: transitioning ? '#7A8694' : '#E8820C',
-                color: 'white', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif',
-                fontWeight: 700, fontSize: '17px', cursor: transitioning ? 'not-allowed' : 'pointer',
+                padding: '16px',
+                backgroundColor: transitioning ? '#555555' : '#3ECF8E',
+                color: '#0A0A0A',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 700,
+                fontSize: '15px',
+                cursor: transitioning ? 'not-allowed' : 'pointer',
                 letterSpacing: '0.02em',
               }}
             >
-              {transitioning ? 'Updating…' : scanState.actionLabel}
+              {transitioning ? 'Recording Custody…' : `${scanState.actionLabel} →`}
             </button>
-            <button onClick={resetScan} style={{ padding: '12px', backgroundColor: 'transparent', color: '#7A8694', border: '1px solid #333', fontFamily: 'IBM Plex Sans, sans-serif', fontSize: '13px', cursor: 'pointer' }}>Scan Another</button>
+
+            <button
+              onClick={resetScan}
+              style={{
+                padding: '10px',
+                backgroundColor: 'transparent',
+                color: '#A0A0A0',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '6px',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel / Scan Another
+            </button>
           </div>
         )}
 
+        {/* SUCCESS STATE */}
         {scanState.type === 'success' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-            <div style={{ padding: '16px', backgroundColor: 'rgba(11,97,87,0.3)', border: '1px solid #0B6157' }}>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: '#6edb71', marginBottom: '4px' }}>✓ Updated</div>
-              <div style={{ fontSize: '14px', color: '#F5F2EE', fontVariantNumeric: 'tabular-nums' }}>{scanState.waybillId}</div>
-              <div style={{ fontSize: '13px', color: '#7A8694', marginTop: '4px' }}>→ {STATUS_LABELS[scanState.newStatus]}</div>
+            <div
+              style={{
+                padding: '16px',
+                backgroundColor: 'rgba(62, 207, 142, 0.1)',
+                border: '1px solid #3ECF8E',
+                borderRadius: '6px',
+              }}
+            >
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#3ECF8E', marginBottom: '4px' }}>
+                ✓ Custody Transition Recorded
+              </div>
+              <div className="font-mono" style={{ fontSize: '14px', color: '#EDEDED' }}>
+                {scanState.waybillId}
+              </div>
+              <div className="font-mono" style={{ fontSize: '12px', color: '#E8820C', marginTop: '4px' }}>
+                Status is now: {STATUS_LABELS[scanState.newStatus] ?? scanState.newStatus}
+              </div>
             </div>
             <div style={{ flex: 1 }} />
-            <button onClick={resetScan} style={{ padding: '18px', backgroundColor: '#0B6157', color: 'white', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif', fontWeight: 700, fontSize: '17px', cursor: 'pointer' }}>Scan Next Parcel</button>
+            <button
+              onClick={resetScan}
+              style={{
+                padding: '15px',
+                backgroundColor: '#3ECF8E',
+                color: '#0A0A0A',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              Scan Next Luggage QR →
+            </button>
           </div>
         )}
 
-        {/* Error: Not found */}
+        {/* ERROR STATE: NOT FOUND */}
         {scanState.type === 'not_found' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-            <div style={{ padding: '16px', backgroundColor: 'rgba(180,0,0,0.2)', border: '1px solid #aa2222' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#ff6b6b', marginBottom: '4px' }}>Not Found</div>
-              <div style={{ fontSize: '13px', color: '#F5F2EE', fontVariantNumeric: 'tabular-nums' }}>{scanState.waybillId}</div>
-              <div style={{ fontSize: '12px', color: '#7A8694', marginTop: '4px' }}>No parcel found — check the ID and try again.</div>
+            <div
+              style={{
+                padding: '16px',
+                backgroundColor: '#261212',
+                border: '1px solid #7F2222',
+                borderRadius: '6px',
+              }}
+            >
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#ff6b6b', marginBottom: '4px' }}>
+                Waybill Not Found
+              </div>
+              <div className="font-mono" style={{ fontSize: '13px', color: '#EDEDED' }}>
+                {scanState.waybillId}
+              </div>
+              <div style={{ fontSize: '12px', color: '#A0A0A0', marginTop: '4px' }}>
+                No consignment registered with this number. Verify the waybill slip and retry.
+              </div>
             </div>
             <div style={{ flex: 1 }} />
-            <button onClick={resetScan} style={{ padding: '18px', backgroundColor: '#333', color: '#F5F2EE', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif', fontWeight: 600, fontSize: '15px', cursor: 'pointer' }}>Scan Again</button>
+            <button
+              onClick={resetScan}
+              style={{
+                padding: '14px',
+                backgroundColor: '#1C1C1C',
+                color: '#EDEDED',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              Scan Again
+            </button>
           </div>
         )}
 
-        {/* Error: Already at status */}
+        {/* ERROR STATE: ALREADY AT STATUS */}
         {scanState.type === 'already_at_status' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-            <div style={{ padding: '16px', backgroundColor: 'rgba(232,130,12,0.15)', border: '1px solid #E8820C' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#E8820C', marginBottom: '4px' }}>Already Updated</div>
-              <div style={{ fontSize: '13px', color: '#F5F2EE', fontVariantNumeric: 'tabular-nums' }}>{scanState.waybillId}</div>
-              <div style={{ fontSize: '12px', color: '#7A8694', marginTop: '4px' }}>Already marked {STATUS_LABELS[scanState.status] ?? scanState.status} — no action needed.</div>
+            <div
+              style={{
+                padding: '16px',
+                backgroundColor: 'rgba(232, 130, 12, 0.12)',
+                border: '1px solid #E8820C',
+                borderRadius: '6px',
+              }}
+            >
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#E8820C', marginBottom: '4px' }}>
+                Already Updated
+              </div>
+              <div className="font-mono" style={{ fontSize: '13px', color: '#EDEDED' }}>
+                {scanState.waybillId}
+              </div>
+              <div style={{ fontSize: '12px', color: '#A0A0A0', marginTop: '4px' }}>
+                Already recorded at status: {STATUS_LABELS[scanState.status] ?? scanState.status}. No duplicate action permitted.
+              </div>
             </div>
             <div style={{ flex: 1 }} />
-            <button onClick={resetScan} style={{ padding: '18px', backgroundColor: '#333', color: '#F5F2EE', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif', fontWeight: 600, fontSize: '15px', cursor: 'pointer' }}>Scan Next</button>
+            <button
+              onClick={resetScan}
+              style={{
+                padding: '14px',
+                backgroundColor: '#1C1C1C',
+                color: '#EDEDED',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              Scan Next
+            </button>
           </div>
         )}
 
-        {/* Error: Invalid / final transition */}
+        {/* ERROR STATE: INVALID / TERMINAL TRANSITION */}
         {scanState.type === 'invalid_transition' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-            <div style={{ padding: '16px', backgroundColor: 'rgba(232,130,12,0.15)', border: '1px solid #E8820C' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#E8820C', marginBottom: '4px' }}>No Action Available</div>
-              <div style={{ fontSize: '13px', color: '#F5F2EE', fontVariantNumeric: 'tabular-nums' }}>{scanState.waybillId}</div>
-              <div style={{ fontSize: '12px', color: '#7A8694', marginTop: '4px' }}>{scanState.message}</div>
+            <div
+              style={{
+                padding: '16px',
+                backgroundColor: 'rgba(232, 130, 12, 0.12)',
+                border: '1px solid #E8820C',
+                borderRadius: '6px',
+              }}
+            >
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#E8820C', marginBottom: '4px' }}>
+                Terminal Custody Reached
+              </div>
+              <div className="font-mono" style={{ fontSize: '13px', color: '#EDEDED' }}>
+                {scanState.waybillId}
+              </div>
+              <div style={{ fontSize: '12px', color: '#A0A0A0', marginTop: '4px' }}>
+                {scanState.message}
+              </div>
             </div>
             <div style={{ flex: 1 }} />
-            <button onClick={resetScan} style={{ padding: '18px', backgroundColor: '#333', color: '#F5F2EE', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif', fontWeight: 600, fontSize: '15px', cursor: 'pointer' }}>Scan Next</button>
+            <button
+              onClick={resetScan}
+              style={{
+                padding: '14px',
+                backgroundColor: '#1C1C1C',
+                color: '#EDEDED',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '6px',
+                fontWeight: 600,
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              Scan Next
+            </button>
           </div>
         )}
 
-        {/* Network error — offer offline queue */}
+        {/* ERROR STATE: NETWORK ERROR (OFFLINE QUEUE) */}
         {scanState.type === 'network_error' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-            <div style={{ padding: '16px', backgroundColor: '#1a1a1a', border: '1px solid #444' }}>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: '#F5F2EE', marginBottom: '4px' }}>No Connection</div>
-              <div style={{ fontSize: '13px', color: '#F5F2EE', fontVariantNumeric: 'tabular-nums' }}>{scanState.waybillId}</div>
-              <div style={{ fontSize: '12px', color: '#7A8694', marginTop: '4px' }}>Save this scan to the offline queue and sync later when connected.</div>
+            <div
+              style={{
+                padding: '16px',
+                backgroundColor: '#1C1C1C',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '6px',
+              }}
+            >
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#EDEDED', marginBottom: '4px' }}>
+                Connection Unavailable
+              </div>
+              <div className="font-mono" style={{ fontSize: '13px', color: '#3ECF8E' }}>
+                {scanState.waybillId}
+              </div>
+              <div style={{ fontSize: '12px', color: '#A0A0A0', marginTop: '4px' }}>
+                Store this custody scan in local storage and sync when bus reaches cellular coverage.
+              </div>
             </div>
             <div style={{ flex: 1 }} />
-            <button onClick={handleQueueOffline} style={{ padding: '18px', backgroundColor: '#E8820C', color: 'white', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif', fontWeight: 700, fontSize: '17px', cursor: 'pointer' }}>Save to Queue ({queueCount + 1})</button>
-            <button onClick={resetScan} style={{ padding: '12px', backgroundColor: 'transparent', color: '#7A8694', border: '1px solid #333', fontFamily: 'IBM Plex Sans, sans-serif', fontSize: '13px', cursor: 'pointer' }}>Discard & Scan Again</button>
+            <button
+              onClick={handleQueueOffline}
+              style={{
+                padding: '15px',
+                backgroundColor: '#E8820C',
+                color: '#0A0A0A',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer',
+              }}
+            >
+              Save to Offline Queue ({queueCount + 1}) →
+            </button>
+            <button
+              onClick={resetScan}
+              style={{
+                padding: '10px',
+                backgroundColor: 'transparent',
+                color: '#A0A0A0',
+                border: 'none',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+            >
+              Discard &amp; Retry
+            </button>
           </div>
         )}
       </div>

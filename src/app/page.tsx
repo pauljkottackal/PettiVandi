@@ -1,351 +1,890 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { useState, useEffect, useRef } from 'react'
+import Navbar from '@/components/Navbar'
+import StatusTimeline from '@/components/StatusTimeline'
+import { BusLogo, BusTransitIcon, DepotIcon } from '@/components/BusIcons'
+
+interface Trip {
+  routeName: string
+  busNumber: string
+  departureDepot: string
+  arrivalDepot: string
+  scheduledDeparture: string
+  distanceKm: number
+}
+
+interface StatusLog {
+  id: string
+  status: string
+  timestamp: string
+  note: string | null
+}
+
+interface Parcel {
+  id: string
+  waybillId: string
+  senderName: string
+  receiverName: string
+  weightKg: number
+  calculatedFare: number
+  status: string
+  whatsappOptedIn: boolean
+  trip: Trip
+  statusLogs: StatusLog[]
+  createdAt: string
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  BOOKED: 'Booked at Depot Counter',
+  LOADED: 'Loaded into Bus Luggage Hold',
+  IN_TRANSIT: 'In Transit on Route',
+  UNLOADED: 'Unloaded at Destination Depot',
+  CLAIMED: 'Collected by Receiver',
+}
 
 export default function Home() {
-  const router = useRouter()
+  // Scroll-linked bus progress state (Hero section ONLY)
+  const heroRef = useRef<HTMLDivElement>(null)
+  const [busProgress, setBusProgress] = useState(12)
 
-  // Depot Clerk Form State
-  const [depotUser, setDepotUser] = useState('')
-  const [depotPass, setDepotPass] = useState('')
-  const [depotError, setDepotError] = useState('')
+  // Tracking section state (Embedded directly on landing page)
+  const [query, setQuery] = useState('PV-2026-5258WOG')
+  const [parcel, setParcel] = useState<Parcel | null>(null)
+  const [notFound, setNotFound] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  // Conductor Form State
-  const [condUser, setCondUser] = useState('')
-  const [condPass, setCondPass] = useState('')
-  const [condError, setCondError] = useState('')
+  // WhatsApp opt-in state (Two-Step Flow)
+  const [waStep, setWaStep] = useState<'idle' | 'step1_tapped' | 'confirmed' | 'error'>('idle')
+  const [waError, setWaError] = useState('')
+  const [optInLoading, setOptInLoading] = useState(false)
 
-  // Citizen direct search state
-  const [trackWaybill, setTrackWaybill] = useState('')
+  // Scroll listener for hero bus movement
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setBusProgress(50)
+      return
+    }
 
-  const handleDepotLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    setDepotError('')
-    if (depotUser.trim().toLowerCase() === 'depot' && depotPass === 'depot123') {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pettivandi_role', 'depot')
-        document.cookie = 'pettivandi_role=depot; path=/; max-age=86400'
+    let ticking = false
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          if (heroRef.current) {
+            const rect = heroRef.current.getBoundingClientRect()
+            const scrollDistance = -rect.top
+            const maxScroll = rect.height
+            const rawRatio = Math.max(0, Math.min(1, scrollDistance / (maxScroll || 1)))
+            // Map 0 -> 1 progress to bus percentage (12% at origin -> 88% at destination)
+            const calculatedPercent = 12 + rawRatio * 76
+            setBusProgress(calculatedPercent)
+          }
+          ticking = false
+        })
+        ticking = true
       }
-      router.push('/depot')
-    } else {
-      setDepotError('Invalid credentials. Use demo shortcut below.')
     }
-  }
 
-  const handleCondLogin = (e: React.FormEvent) => {
-    e.preventDefault()
-    setCondError('')
-    if (condUser.trim().toLowerCase() === 'conductor' && condPass === 'conductor123') {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('pettivandi_role', 'conductor')
-        document.cookie = 'pettivandi_role=conductor; path=/; max-age=86400'
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Auto-load sample parcel on mount for instant demonstration
+  useEffect(() => {
+    performSearch('PV-2026-5258WOG')
+  }, [])
+
+  const performSearch = async (waybillId: string) => {
+    if (!waybillId.trim()) return
+    setLoading(true)
+    setNotFound(false)
+    setError('')
+    setParcel(null)
+    setWaStep('idle')
+
+    try {
+      const res = await fetch(`/api/parcels/${encodeURIComponent(waybillId.trim())}`)
+      if (res.status === 404) {
+        setNotFound(true)
+        return
       }
-      router.push('/conductor')
-    } else {
-      setCondError('Invalid credentials. Use demo shortcut below.')
+      if (!res.ok) throw new Error('Server error')
+      const data = await res.json()
+      setParcel(data)
+      if (data.whatsappOptedIn) setWaStep('confirmed')
+    } catch {
+      setError('Unable to fetch tracking data. Verify the consignment ID and retry.')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const fillDepotDemo = () => {
-    setDepotUser('depot')
-    setDepotPass('depot123')
-    setDepotError('')
-  }
-
-  const fillCondDemo = () => {
-    setCondUser('conductor')
-    setCondPass('conductor123')
-    setCondError('')
-  }
-
-  const handleCitizenSearch = (e: React.FormEvent) => {
+  const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (trackWaybill.trim()) {
-      router.push(`/track?id=${encodeURIComponent(trackWaybill.trim())}`)
-    } else {
-      router.push('/track')
+    performSearch(query)
+  }
+
+  const handleWhatsAppStep1 = () => {
+    const number = process.env.NEXT_PUBLIC_TWILIO_WHATSAPP_NUMBER ?? '+14155238886'
+    const rawCode = process.env.NEXT_PUBLIC_TWILIO_SANDBOX_JOIN_CODE ?? 'twilio-trial'
+    const code = rawCode.replace(/^join\s+/i, '').trim()
+    const url = `https://wa.me/${number.replace('+', '')}?text=join%20${encodeURIComponent(code)}`
+    window.open(url, '_blank')
+    setWaStep('step1_tapped')
+  }
+
+  const handleWhatsAppConfirm = async () => {
+    if (!parcel) return
+    setOptInLoading(true)
+    setWaError('')
+    try {
+      const res = await fetch(`/api/parcels/${parcel.waybillId}/whatsapp-optin`, { method: 'POST' })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error ?? 'Failed to activate opt-in')
+      }
+      setWaStep('confirmed')
+      setParcel({ ...parcel, whatsappOptedIn: true })
+    } catch (err) {
+      setWaError(err instanceof Error ? err.message : 'Something went wrong')
+      setWaStep('error')
+    } finally {
+      setOptInLoading(false)
     }
-  }
-
-  const inputStyle = {
-    width: '100%',
-    padding: '9px 12px',
-    border: '1.5px solid #d0cbc4',
-    backgroundColor: '#FFFFFF',
-    fontFamily: 'IBM Plex Sans, sans-serif',
-    fontSize: '13px',
-    color: '#1A1A1A',
-    outline: 'none',
-  }
-
-  const labelStyle = {
-    display: 'block',
-    fontSize: '10px',
-    fontWeight: 600,
-    letterSpacing: '0.08em',
-    color: '#7A8694',
-    marginBottom: '4px',
-    textTransform: 'uppercase' as const,
   }
 
   return (
-    <main style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#F5F2EE' }}>
-      {/* Header */}
-      <header style={{ backgroundColor: '#0B6157', color: 'white', padding: '24px 24px' }}>
-        <div style={{ maxWidth: '1100px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-              <h1 style={{ fontSize: '28px', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>PettiVandi</h1>
-              <span style={{ fontSize: '12px', fontWeight: 600, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>by KSRTC</span>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0A0A0A', color: '#EDEDED' }}>
+      {/* 1. PERSISTENT TOP NAVIGATION BAR */}
+      <Navbar />
+
+      {/* 2. HERO SECTION WITH SCROLL-LINKED BUS GRAPHIC */}
+      <section
+        ref={heroRef}
+        style={{
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          background: 'linear-gradient(180deg, #131514 0%, #0A0A0A 100%)',
+          padding: '56px 24px 48px',
+        }}
+      >
+        <div style={{ maxWidth: '1140px', margin: '0 auto' }}>
+          <div style={{ maxWidth: '720px', marginBottom: '36px' }}>
+            <div
+              className="font-mono"
+              style={{
+                display: 'inline-block',
+                fontSize: '11px',
+                color: '#3ECF8E',
+                backgroundColor: 'rgba(62, 207, 142, 0.1)',
+                border: '1px solid rgba(62, 207, 142, 0.25)',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                marginBottom: '16px',
+                letterSpacing: '0.06em',
+              }}
+            >
+              KERALA STATE ROAD TRANSPORT CORPORATION · COURIER NETWORK
             </div>
-            <p style={{ margin: '4px 0 0', fontSize: '14px', opacity: 0.85 }}>State Bus Parcel Booking &amp; Strict Custody Tracking</p>
+
+            <h1
+              style={{
+                fontSize: '38px',
+                fontWeight: 800,
+                letterSpacing: '-0.03em',
+                lineHeight: 1.15,
+                margin: '0 0 16px',
+                color: '#EDEDED',
+              }}
+            >
+              Parcel booking &amp; tracking on scheduled state buses.
+            </h1>
+
+            <p style={{ fontSize: '16px', color: '#A0A0A0', lineHeight: 1.55, margin: '0 0 28px' }}>
+              PettiVandi digitizes KSRTC’s existing counter parcel service. Consignments travel in the luggage hold of
+              scheduled passenger buses, tracked through a strict physical custody state machine with automated WhatsApp updates.
+            </p>
+
+            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+              <a
+                href="#track"
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#3ECF8E',
+                  color: '#0A0A0A',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  textDecoration: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <span>Track a Parcel</span>
+                <span>↓</span>
+              </a>
+
+              <a
+                href="#how-it-works"
+                style={{
+                  padding: '12px 20px',
+                  backgroundColor: '#1C1C1C',
+                  color: '#EDEDED',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  textDecoration: 'none',
+                }}
+              >
+                How It Works →
+              </a>
+            </div>
           </div>
 
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.12)', padding: '6px 12px', border: '1px solid rgba(255,255,255,0.25)', fontSize: '11px', letterSpacing: '0.05em' }}>
-            DEMO MODE · SIMULATED ROLES
+          {/* SCROLL-LINKED ROUTE COMPONENT */}
+          <div
+            style={{
+              backgroundColor: '#1C1C1C',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '8px',
+              padding: '24px 20px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <DepotIcon size={20} color="#3ECF8E" />
+                <div>
+                  <div style={{ fontSize: '10px', color: '#A0A0A0', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    ORIGIN DEPOT
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#EDEDED' }}>Angamaly Bus Stand</div>
+                </div>
+              </div>
+
+              <div
+                className="font-mono"
+                style={{
+                  fontSize: '11px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  backgroundColor: 'rgba(62, 207, 142, 0.1)',
+                  color: '#3ECF8E',
+                  border: '1px solid rgba(62, 207, 142, 0.25)',
+                }}
+              >
+                LIVE ROUTE TRANSIT: BUS KL-07-1234 (25 KM)
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', textAlign: 'right' }}>
+                <div>
+                  <div style={{ fontSize: '10px', color: '#A0A0A0', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    DESTINATION DEPOT
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#EDEDED' }}>Ernakulam (High Court)</div>
+                </div>
+                <DepotIcon size={20} color="#A0A0A0" />
+              </div>
+            </div>
+
+            {/* Highway Route Track Line with Scroll-Linked Bus */}
+            <div style={{ position: 'relative', height: '54px', display: 'flex', alignItems: 'center', margin: '6px 0' }}>
+              {/* Road line background */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  right: '12px',
+                  height: '4px',
+                  backgroundColor: '#141414',
+                  borderRadius: '2px',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              />
+
+              {/* Progress bar in Supabase Green */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  width: `calc(${busProgress}% - 12px)`,
+                  height: '4px',
+                  backgroundColor: '#3ECF8E',
+                  borderRadius: '2px',
+                  transition: 'width 0.15s ease-out',
+                }}
+              />
+
+              {/* The Scroll-Linked Bus Icon */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${busProgress}%`,
+                  transform: 'translateX(-50%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  transition: 'left 0.15s ease-out',
+                  zIndex: 3,
+                }}
+              >
+                <BusTransitIcon size={46} color="#3ECF8E" />
+                <span
+                  className="font-mono"
+                  style={{
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    color: '#E8820C',
+                    letterSpacing: '0.05em',
+                    marginTop: '2px',
+                    backgroundColor: '#141414',
+                    padding: '1px 5px',
+                    borderRadius: '3px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                  }}
+                >
+                  SCROLL PROGRESS
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#A0A0A0', marginTop: '12px' }}>
+              <span className="font-mono">Depot Counter (0 km)</span>
+              <span style={{ fontSize: '11px', color: '#666666', fontStyle: 'italic' }}>
+                ↓ Scroll page down to see bus travel to destination
+              </span>
+              <span className="font-mono">Arrival Hub (25 km)</span>
+            </div>
           </div>
         </div>
-      </header>
+      </section>
 
-      {/* Main Grid: 2 Login Cards + 1 Open Tracking Card */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
-        <div style={{ width: '100%', maxWidth: '1100px' }}>
-          <div style={{ marginBottom: '24px' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#1A1A1A', margin: 0 }}>Select Station / Portal</h2>
-            <p style={{ fontSize: '13px', color: '#7A8694', margin: '4px 0 0' }}>
-              Sign in to operational roles using demo credentials, or access citizen tracking directly without login.
+      {/* 3. TRACKING SECTION (#track) - THE CORE FUNCTIONAL HUB */}
+      <section id="track" style={{ padding: '64px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ maxWidth: '860px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+            <div
+              className="font-mono"
+              style={{
+                fontSize: '11px',
+                color: '#3ECF8E',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: '8px',
+              }}
+            >
+              PUBLIC CONSIGNMENT LOOKUP
+            </div>
+            <h2 style={{ fontSize: '28px', fontWeight: 700, color: '#EDEDED', margin: '0 0 8px' }}>
+              Track Parcel Custody in Real-Time
+            </h2>
+            <p style={{ fontSize: '14px', color: '#A0A0A0', margin: 0 }}>
+              Enter your waybill number to inspect live physical custody handoffs across bus routes.
             </p>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: '24px' }}>
-            
-            {/* CARD 1: DEPOT CLERK (Login required) */}
-            <div style={{ backgroundColor: '#FFFFFF', border: '2px solid #0B6157', padding: '24px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '24px' }}>📦</span>
-                <div>
-                  <h3 style={{ fontSize: '17px', fontWeight: 700, margin: 0, color: '#0B6157' }}>Depot Clerk</h3>
-                  <div style={{ fontSize: '11px', color: '#7A8694' }}>Booking Counter &amp; Loading Manifest</div>
-                </div>
-              </div>
+          {/* Search Box */}
+          <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '14px' }}>
+            <input
+              className="pv-input font-mono"
+              style={{ fontSize: '15px', padding: '14px 18px' }}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="e.g. PV-2026-5258WOG"
+              autoCorrect="off"
+              autoCapitalize="characters"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                padding: '14px 26px',
+                backgroundColor: loading ? '#555555' : '#3ECF8E',
+                color: '#0A0A0A',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {loading ? 'Locating…' : 'Track Parcel →'}
+            </button>
+          </form>
 
-              <p style={{ fontSize: '12px', color: '#1A1A1A', marginBottom: '16px', lineHeight: 1.4 }}>
-                Weigh consignments, calculate dynamic stage fares, and issue printable QR waybill slips.
-              </p>
-
-              <form onSubmit={handleDepotLogin} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-                <div>
-                  <label style={labelStyle}>Staff ID</label>
-                  <input
-                    style={inputStyle}
-                    value={depotUser}
-                    onChange={(e) => setDepotUser(e.target.value)}
-                    placeholder="e.g. depot"
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={labelStyle}>Password</label>
-                  <input
-                    type="password"
-                    style={inputStyle}
-                    value={depotPass}
-                    onChange={(e) => setDepotPass(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                  />
-                </div>
-
-                {depotError && (
-                  <div style={{ fontSize: '11px', color: '#dc2626', backgroundColor: '#fef2f2', padding: '6px 8px', border: '1px solid #fca5a5' }}>
-                    {depotError}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  style={{
-                    marginTop: '4px',
-                    padding: '11px',
-                    backgroundColor: '#0B6157',
-                    color: 'white',
-                    border: 'none',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Sign In to Depot Desk →
-                </button>
-              </form>
-
-              {/* Demo shortcut note */}
-              <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px dashed #e8e3dc' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', color: '#7A8694', fontWeight: 600, letterSpacing: '0.05em' }}>DEMO SHORTCUT:</span>
-                  <button
-                    type="button"
-                    onClick={fillDepotDemo}
-                    style={{
-                      background: '#F5F2EE',
-                      border: '1px solid #d0cbc4',
-                      padding: '3px 8px',
-                      fontSize: '11px',
-                      color: '#0B6157',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Autofill (depot / depot123)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* CARD 2: CONDUCTOR (Login required) */}
-            <div style={{ backgroundColor: '#1A1A1A', border: '2px solid #1A1A1A', color: '#FFFFFF', padding: '24px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '24px' }}>🚌</span>
-                <div>
-                  <h3 style={{ fontSize: '17px', fontWeight: 700, margin: 0, color: '#FFFFFF' }}>Conductor</h3>
-                  <div style={{ fontSize: '11px', color: '#7A8694' }}>Mobile Scanner &amp; Custody Transition</div>
-                </div>
-              </div>
-
-              <p style={{ fontSize: '12px', color: '#d0cbc4', marginBottom: '16px', lineHeight: 1.4 }}>
-                One-handed mobile scanner for in-bus custody verification and arrival depot handoff.
-              </p>
-
-              <form onSubmit={handleCondLogin} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
-                <div>
-                  <label style={{ ...labelStyle, color: '#A0AEC0' }}>Conductor ID</label>
-                  <input
-                    style={{ ...inputStyle, backgroundColor: '#2D3748', border: '1.5px solid #4A5568', color: '#FFFFFF' }}
-                    value={condUser}
-                    onChange={(e) => setCondUser(e.target.value)}
-                    placeholder="e.g. conductor"
-                    required
-                  />
-                </div>
-                <div>
-                  <label style={{ ...labelStyle, color: '#A0AEC0' }}>PIN / Password</label>
-                  <input
-                    type="password"
-                    style={{ ...inputStyle, backgroundColor: '#2D3748', border: '1.5px solid #4A5568', color: '#FFFFFF' }}
-                    value={condPass}
-                    onChange={(e) => setCondPass(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                  />
-                </div>
-
-                {condError && (
-                  <div style={{ fontSize: '11px', color: '#ff6b6b', backgroundColor: '#3b1212', padding: '6px 8px', border: '1px solid #7f1d1d' }}>
-                    {condError}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  style={{
-                    marginTop: '4px',
-                    padding: '11px',
-                    backgroundColor: '#E8820C',
-                    color: 'white',
-                    border: 'none',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Open Scanner Console →
-                </button>
-              </form>
-
-              {/* Demo shortcut note */}
-              <div style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px dashed #4A5568' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', color: '#A0AEC0', fontWeight: 600, letterSpacing: '0.05em' }}>DEMO SHORTCUT:</span>
-                  <button
-                    type="button"
-                    onClick={fillCondDemo}
-                    style={{
-                      background: '#2D3748',
-                      border: '1px solid #4A5568',
-                      padding: '3px 8px',
-                      fontSize: '11px',
-                      color: '#E8820C',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Autofill (conductor / conductor123)
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* CARD 3: CITIZEN TRACKING (Public - NO login required) */}
-            <div style={{ backgroundColor: '#FFFFFF', border: '1.5px solid #d0cbc4', padding: '24px', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '24px' }}>📍</span>
-                <div>
-                  <h3 style={{ fontSize: '17px', fontWeight: 700, margin: 0, color: '#1A1A1A' }}>Citizen Tracking</h3>
-                  <div style={{ fontSize: '11px', color: '#0B6157', fontWeight: 600 }}>Public Service · No Login Needed</div>
-                </div>
-              </div>
-
-              <p style={{ fontSize: '12px', color: '#7A8694', marginBottom: '20px', lineHeight: 1.4 }}>
-                Track parcel movement live across Kerala state bus routes. Senders and receivers can follow custody handoffs with zero registration.
-              </p>
-
-              {/* Direct search form */}
-              <form onSubmit={handleCitizenSearch} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-                <div>
-                  <label style={labelStyle}>Quick Consignment Search</label>
-                  <input
-                    style={inputStyle}
-                    value={trackWaybill}
-                    onChange={(e) => setTrackWaybill(e.target.value)}
-                    placeholder="e.g. PV-2026-5258WOG"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  style={{
-                    padding: '11px',
-                    backgroundColor: '#F5F2EE',
-                    color: '#1A1A1A',
-                    border: '1.5px solid #1A1A1A',
-                    fontWeight: 700,
-                    fontSize: '13px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Track Parcel Journey →
-                </button>
-              </form>
-
-              <div style={{ marginTop: 'auto', padding: '12px', backgroundColor: 'rgba(11,97,87,0.06)', borderLeft: '3px solid #0B6157' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#0B6157', marginBottom: '2px' }}>WhatsApp Notifications Included</div>
-                <div style={{ fontSize: '11px', color: '#7A8694', lineHeight: 1.3 }}>
-                  Opt-in with one click on the tracking page to receive status alerts at each transit hub.
-                </div>
-              </div>
-            </div>
-
+          {/* Demo sample waybill prompt */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#A0A0A0', marginBottom: '32px' }}>
+            <span>Try sample waybill:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('PV-2026-5258WOG')
+                performSearch('PV-2026-5258WOG')
+              }}
+              className="font-mono"
+              style={{
+                background: '#1C1C1C',
+                border: '1px solid rgba(255,255,255,0.12)',
+                color: '#3ECF8E',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '11px',
+              }}
+            >
+              PV-2026-5258WOG
+            </button>
           </div>
 
-          <div style={{ marginTop: '32px', textAlign: 'center', fontSize: '12px', color: '#7A8694' }}>
-            Kerala State Road Transport Corporation · PettiVandi Digitized Logistics Platform
+          {/* Not Found Panel */}
+          {notFound && (
+            <div
+              style={{
+                padding: '24px',
+                backgroundColor: '#1C1C1C',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                marginBottom: '28px',
+              }}
+            >
+              <div style={{ fontSize: '15px', fontWeight: 600, color: '#EDEDED' }}>
+                No parcel found with that ID
+              </div>
+              <div style={{ fontSize: '13px', color: '#A0A0A0', marginTop: '6px', lineHeight: 1.4 }}>
+                Check the consignment number printed on your booking slip (format: <span className="font-mono" style={{ color: '#3ECF8E' }}>PV-2026-XXXXXX</span>) and try again.
+              </div>
+            </div>
+          )}
+
+          {/* Network Error */}
+          {error && (
+            <div
+              className="font-mono"
+              style={{
+                padding: '14px 18px',
+                backgroundColor: '#241212',
+                border: '1px solid #732222',
+                borderRadius: '6px',
+                color: '#ff6b6b',
+                fontSize: '13px',
+                marginBottom: '28px',
+              }}
+            >
+              {error}
+            </div>
+          )}
+
+          {/* Inline Parcel Result View */}
+          {parcel && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Summary Card */}
+              <div
+                className="pv-card"
+                style={{
+                  backgroundColor: '#1C1C1C',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '8px',
+                  padding: '24px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontSize: '10px', color: '#A0A0A0', letterSpacing: '0.1em' }}>CONSIGNMENT NUMBER</div>
+                    <div className="font-mono" style={{ fontSize: '24px', fontWeight: 700, color: '#3ECF8E', marginTop: '2px' }}>
+                      {parcel.waybillId}
+                    </div>
+                  </div>
+
+                  <div
+                    className="font-mono"
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      backgroundColor:
+                        parcel.status === 'CLAIMED'
+                          ? 'rgba(62, 207, 142, 0.15)'
+                          : parcel.status === 'IN_TRANSIT'
+                          ? 'rgba(232, 130, 12, 0.15)'
+                          : 'rgba(255, 255, 255, 0.08)',
+                      color:
+                        parcel.status === 'CLAIMED'
+                          ? '#3ECF8E'
+                          : parcel.status === 'IN_TRANSIT'
+                          ? '#E8820C'
+                          : '#EDEDED',
+                      fontWeight: 700,
+                      fontSize: '11px',
+                      border: `1px solid ${
+                        parcel.status === 'CLAIMED'
+                          ? 'rgba(62, 207, 142, 0.3)'
+                          : parcel.status === 'IN_TRANSIT'
+                          ? 'rgba(232, 130, 12, 0.3)'
+                          : 'rgba(255, 255, 255, 0.1)'
+                      }`,
+                    }}
+                  >
+                    {STATUS_LABELS[parcel.status] ?? parcel.status}
+                  </div>
+                </div>
+
+                {/* Details Grid */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                    gap: '16px',
+                    paddingTop: '16px',
+                    borderTop: '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  {[
+                    ['ROUTE', parcel.trip.routeName, false],
+                    ['BUS NUMBER', parcel.trip.busNumber, true],
+                    ['DEPARTURE', parcel.trip.departureDepot, false],
+                    ['DESTINATION', parcel.trip.arrivalDepot, false],
+                    ['WEIGHT', `${parcel.weightKg} kg`, true],
+                    ['STAGE FARE', `₹${parcel.calculatedFare.toFixed(2)}`, true],
+                  ].map(([label, value, isMono]) => (
+                    <div key={label as string}>
+                      <div style={{ fontSize: '9px', color: '#A0A0A0', letterSpacing: '0.08em', marginBottom: '3px' }}>
+                        {label}
+                      </div>
+                      <div
+                        className={isMono ? 'font-mono' : ''}
+                        style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          color: label === 'STAGE FARE' ? '#E8820C' : '#EDEDED',
+                        }}
+                      >
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Real-time Route and Timeline with Functional Bus */}
+              <div>
+                <div style={{ fontSize: '11px', color: '#A0A0A0', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '12px' }}>
+                  PHYSICAL CUSTODY TIMELINE
+                </div>
+                <StatusTimeline
+                  statusLogs={parcel.statusLogs}
+                  currentStatus={parcel.status}
+                  departureDepot={parcel.trip.departureDepot}
+                  arrivalDepot={parcel.trip.arrivalDepot}
+                  busNumber={parcel.trip.busNumber}
+                />
+              </div>
+
+              {/* Two-Step WhatsApp Notification Box */}
+              <div
+                className="pv-card"
+                style={{
+                  backgroundColor: '#1C1C1C',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '8px',
+                  padding: '22px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                  <span style={{ fontSize: '18px' }}>💬</span>
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: '#EDEDED' }}>
+                    WhatsApp Transit Alerts
+                  </span>
+                </div>
+
+                {waStep === 'idle' && (
+                  <div>
+                    <p style={{ fontSize: '13px', color: '#A0A0A0', marginBottom: '16px', lineHeight: 1.4 }}>
+                      Get instant alerts on WhatsApp when this consignment is loaded, departs on the highway, and lands at the arrival counter.
+                    </p>
+                    <button
+                      onClick={handleWhatsAppStep1}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '11px 20px',
+                        backgroundColor: '#3ECF8E',
+                        color: '#0A0A0A',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span>💬</span> Opt-in for WhatsApp Updates →
+                    </button>
+                  </div>
+                )}
+
+                {waStep === 'step1_tapped' && (
+                  <div
+                    style={{
+                      backgroundColor: '#141414',
+                      border: '1px solid rgba(62, 207, 142, 0.25)',
+                      borderRadius: '6px',
+                      padding: '16px',
+                    }}
+                  >
+                    <p style={{ fontSize: '13px', color: '#EDEDED', margin: '0 0 14px', lineHeight: 1.5 }}>
+                      Once you've sent the join message in WhatsApp, tap below to activate updates.
+                    </p>
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={handleWhatsAppConfirm}
+                        disabled={optInLoading}
+                        style={{
+                          padding: '10px 18px',
+                          backgroundColor: '#3ECF8E',
+                          color: '#0A0A0A',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          fontSize: '13px',
+                          cursor: optInLoading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {optInLoading ? 'Activating…' : 'Yes, activate updates →'}
+                      </button>
+                      <button
+                        onClick={handleWhatsAppStep1}
+                        style={{
+                          padding: '10px 14px',
+                          backgroundColor: 'transparent',
+                          color: '#A0A0A0',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Re-open WhatsApp
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {waStep === 'confirmed' && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      color: '#3ECF8E',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      backgroundColor: 'rgba(62, 207, 142, 0.08)',
+                      padding: '10px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(62, 207, 142, 0.2)',
+                    }}
+                  >
+                    <span style={{ fontSize: '16px' }}>✓</span>
+                    WhatsApp courier updates are activated for this consignment.
+                  </div>
+                )}
+
+                {waStep === 'error' && (
+                  <div>
+                    <div className="font-mono" style={{ color: '#ff6b6b', fontSize: '12px', marginBottom: '10px' }}>
+                      {waError}
+                    </div>
+                    <button
+                      onClick={handleWhatsAppConfirm}
+                      style={{
+                        padding: '8px 14px',
+                        backgroundColor: '#3ECF8E',
+                        color: '#0A0A0A',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: 600,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 4. "HOW IT WORKS" SECTION (#how-it-works) */}
+      <section id="how-it-works" style={{ padding: '64px 24px', backgroundColor: '#0D0D0D', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ maxWidth: '1140px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '44px' }}>
+            <div
+              className="font-mono"
+              style={{
+                fontSize: '11px',
+                color: '#3ECF8E',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                marginBottom: '8px',
+              }}
+            >
+              CITIZEN WORKFLOW
+            </div>
+            <h2 style={{ fontSize: '28px', fontWeight: 700, color: '#EDEDED', margin: '0 0 8px' }}>
+              How KSRTC PettiVandi Works
+            </h2>
+            <p style={{ fontSize: '14px', color: '#A0A0A0', margin: 0 }}>
+              Three straightforward steps from depot counter drop-off to destination collection.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
+            {/* Step 1 */}
+            <div
+              className="pv-card"
+              style={{
+                backgroundColor: '#141414',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
+                padding: '28px 24px',
+              }}
+            >
+              <div
+                className="font-mono"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(62, 207, 142, 0.1)',
+                  color: '#3ECF8E',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  marginBottom: '16px',
+                  border: '1px solid rgba(62, 207, 142, 0.25)',
+                }}
+              >
+                01
+              </div>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#EDEDED', margin: '0 0 10px' }}>
+                Book at Depot Counter
+              </h3>
+              <p style={{ fontSize: '13px', color: '#A0A0A0', lineHeight: 1.5, margin: 0 }}>
+                Bring your consignment to any KSRTC bus stand counter. Staff weigh it, compute dynamic route-band fares, and affix an official 80mm QR waybill tag.
+              </p>
+            </div>
+
+            {/* Step 2 */}
+            <div
+              className="pv-card"
+              style={{
+                backgroundColor: '#141414',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
+                padding: '28px 24px',
+              }}
+            >
+              <div
+                className="font-mono"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(232, 130, 12, 0.1)',
+                  color: '#E8820C',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  marginBottom: '16px',
+                  border: '1px solid rgba(232, 130, 12, 0.25)',
+                }}
+              >
+                02
+              </div>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#EDEDED', margin: '0 0 10px' }}>
+                Track Bus Hold Transit
+              </h3>
+              <p style={{ fontSize: '13px', color: '#A0A0A0', lineHeight: 1.5, margin: 0 }}>
+                Conductors scan the luggage QR into the bus hold upon boarding. The strict custody state machine guarantees no transitions can be forged or skipped.
+              </p>
+            </div>
+
+            {/* Step 3 */}
+            <div
+              className="pv-card"
+              style={{
+                backgroundColor: '#141414',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
+                padding: '28px 24px',
+              }}
+            >
+              <div
+                className="font-mono"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(62, 207, 142, 0.1)',
+                  color: '#3ECF8E',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  marginBottom: '16px',
+                  border: '1px solid rgba(62, 207, 142, 0.25)',
+                }}
+              >
+                03
+              </div>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#EDEDED', margin: '0 0 10px' }}>
+                WhatsApp Arrival Alerts
+              </h3>
+              <p style={{ fontSize: '13px', color: '#A0A0A0', lineHeight: 1.5, margin: 0 }}>
+                Receivers receive automated WhatsApp alerts as the bus progresses and unloads at the destination depot counter for secure physical collection.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    </main>
+      </section>
+
+      {/* 5. PUBLIC SERVICE FOOTER */}
+      <footer style={{ padding: '36px 24px', backgroundColor: '#0A0A0A', marginTop: 'auto' }}>
+        <div
+          style={{
+            maxWidth: '1140px',
+            margin: '0 auto',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '16px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <BusLogo size={20} color="#3ECF8E" />
+            <span style={{ fontSize: '13px', color: '#A0A0A0' }}>
+              Kerala State Road Transport Corporation · PettiVandi Digitized Logistics
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#777777' }}>
+            <span>Manual Service Digitization Prototype</span>
+            <span>·</span>
+            <span>PostgreSQL &amp; Prisma ORM</span>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }

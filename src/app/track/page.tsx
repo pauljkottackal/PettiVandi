@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import StatusTimeline from '@/components/StatusTimeline'
+import { BusLogo } from '@/components/BusIcons'
 
 interface Trip {
   routeName: string
@@ -34,11 +35,11 @@ interface Parcel {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  BOOKED: 'Booked',
-  LOADED: 'Loaded onto Bus',
-  IN_TRANSIT: 'In Transit',
-  UNLOADED: 'Unloaded at Destination',
-  CLAIMED: 'Claimed',
+  BOOKED: 'Booked at Depot Counter',
+  LOADED: 'Loaded into Bus Luggage Hold',
+  IN_TRANSIT: 'In Transit on Route',
+  UNLOADED: 'Unloaded at Destination Depot',
+  CLAIMED: 'Collected by Receiver',
 }
 
 export default function TrackPage() {
@@ -48,7 +49,7 @@ export default function TrackPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // WhatsApp opt-in state
+  // WhatsApp opt-in state (Two-Step Confirmation)
   const [waStep, setWaStep] = useState<'idle' | 'step1_tapped' | 'confirmed' | 'error'>('idle')
   const [waError, setWaError] = useState('')
   const [optInLoading, setOptInLoading] = useState(false)
@@ -72,13 +73,13 @@ export default function TrackPage() {
       setParcel(data)
       if (data.whatsappOptedIn) setWaStep('confirmed')
     } catch {
-      setError('Something went wrong. Please try again.')
+      setError('Connection error. Please check your network and try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  // Check URL query param on mount
+  // Check URL query param on mount (e.g. /track?id=PV-2026-...)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -95,6 +96,7 @@ export default function TrackPage() {
     performSearch(query)
   }
 
+  // Step 1: Opens WhatsApp with prefilled join code, changes button prompt
   const handleWhatsAppStep1 = () => {
     const number = process.env.NEXT_PUBLIC_TWILIO_WHATSAPP_NUMBER ?? '+14155238886'
     const rawCode = process.env.NEXT_PUBLIC_TWILIO_SANDBOX_JOIN_CODE ?? 'twilio-trial'
@@ -104,6 +106,7 @@ export default function TrackPage() {
     setWaStep('step1_tapped')
   }
 
+  // Step 2: Explicit Confirmation click triggers the DB update
   const handleWhatsAppConfirm = async () => {
     if (!parcel) return
     setOptInLoading(true)
@@ -112,7 +115,7 @@ export default function TrackPage() {
       const res = await fetch(`/api/parcels/${parcel.waybillId}/whatsapp-optin`, { method: 'POST' })
       if (!res.ok) {
         const d = await res.json()
-        throw new Error(d.error ?? 'Failed to activate')
+        throw new Error(d.error ?? 'Failed to activate opt-in')
       }
       setWaStep('confirmed')
       setParcel({ ...parcel, whatsappOptedIn: true })
@@ -124,40 +127,33 @@ export default function TrackPage() {
     }
   }
 
-  const inputStyle = {
-    padding: '14px 16px',
-    border: '2px solid #d0cbc4',
-    backgroundColor: 'white',
-    fontFamily: 'IBM Plex Sans, sans-serif',
-    fontSize: '16px',
-    color: '#1A1A1A',
-    outline: 'none',
-    width: '100%',
-    letterSpacing: '0.05em',
-    fontVariantNumeric: 'tabular-nums' as const,
-  }
-
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#F5F2EE', fontFamily: 'IBM Plex Sans, sans-serif' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#0A0A0A', color: '#EDEDED', fontFamily: 'var(--font-sans)' }}>
       {/* Header */}
-      <header style={{ backgroundColor: '#0B6157', color: 'white', padding: '16px 24px' }}>
-        <div style={{ maxWidth: '640px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: '13px', opacity: 0.7 }}>PettiVandi · KSRTC</div>
-            <h1 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Track Your Parcel</h1>
+      <header style={{ backgroundColor: '#0A0A0A', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '16px 24px' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <BusLogo size={22} color="#3ECF8E" />
+            <div>
+              <div style={{ fontSize: '11px', color: '#3ECF8E', fontWeight: 600, letterSpacing: '0.05em' }}>KSRTC PETTIVANDI</div>
+              <h1 style={{ fontSize: '18px', fontWeight: 700, margin: 0, color: '#EDEDED' }}>Citizen Consignment Tracker</h1>
+            </div>
           </div>
-          <a href="/" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', textDecoration: 'none' }}>← Home</a>
+          <a href="/" style={{ color: '#A0A0A0', fontSize: '13px', textDecoration: 'none', padding: '5px 10px', borderRadius: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
+            ← Home
+          </a>
         </div>
       </header>
 
-      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '40px 24px' }}>
-        {/* Search form */}
-        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '0', marginBottom: '40px' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px 24px' }}>
+        {/* Search Input Box */}
+        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', marginBottom: '32px' }}>
           <input
-            style={inputStyle}
+            className="pv-input font-mono"
+            style={{ fontSize: '15px', padding: '13px 16px' }}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter waybill ID, e.g. PV-2026-1234ABC"
+            placeholder="Enter Waybill / Consignment ID (e.g. PV-2026-5258WOG)"
             autoCorrect="off"
             autoCapitalize="characters"
           />
@@ -165,136 +161,297 @@ export default function TrackPage() {
             type="submit"
             disabled={loading}
             style={{
-              padding: '14px 24px', backgroundColor: loading ? '#7A8694' : '#0B6157',
-              color: 'white', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif',
-              fontWeight: 700, fontSize: '15px', cursor: loading ? 'not-allowed' : 'pointer',
+              padding: '13px 24px',
+              backgroundColor: loading ? '#555555' : '#3ECF8E',
+              color: '#0A0A0A',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 700,
+              fontSize: '14px',
+              cursor: loading ? 'not-allowed' : 'pointer',
               whiteSpace: 'nowrap',
+              transition: 'opacity 0.15s ease',
             }}
           >
-            {loading ? '…' : 'Track'}
+            {loading ? 'Locating…' : 'Track Parcel →'}
           </button>
         </form>
 
-        {/* Not found */}
+        {/* Not Found Panel */}
         {notFound && (
-          <div style={{ padding: '24px', backgroundColor: 'white', border: '1.5px solid #e8e3dc', color: '#1A1A1A' }}>
-            <p style={{ margin: 0, fontSize: '15px', fontWeight: 500 }}>No parcel found with that ID — check the number and try again.</p>
-            <p style={{ margin: '8px 0 0', fontSize: '13px', color: '#7A8694' }}>Waybill IDs look like: PV-2026-1234ABC</p>
+          <div
+            style={{
+              padding: '24px',
+              backgroundColor: '#1C1C1C',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: '8px',
+              marginBottom: '32px',
+            }}
+          >
+            <div style={{ fontSize: '15px', fontWeight: 600, color: '#EDEDED' }}>
+              No parcel found with that ID
+            </div>
+            <div style={{ fontSize: '13px', color: '#A0A0A0', marginTop: '6px', lineHeight: 1.4 }}>
+              Check the consignment number printed on your booking slip (format: <span className="font-mono" style={{ color: '#3ECF8E' }}>PV-2026-XXXXXX</span>) and try again.
+            </div>
           </div>
         )}
 
-        {/* Error */}
+        {/* Network Error */}
         {error && (
-          <div style={{ padding: '16px', backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', color: '#dc2626', fontSize: '14px' }}>
+          <div
+            className="font-mono"
+            style={{
+              padding: '14px 18px',
+              backgroundColor: '#241212',
+              border: '1px solid #732222',
+              borderRadius: '6px',
+              color: '#ff6b6b',
+              fontSize: '13px',
+              marginBottom: '28px',
+            }}
+          >
             {error}
           </div>
         )}
 
-        {/* Result */}
+        {/* Parcel Result View */}
         {parcel && (
-          <div>
-            {/* Parcel summary */}
-            <div style={{ backgroundColor: 'white', border: '1.5px solid #e8e3dc', padding: '24px', marginBottom: '32px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            
+            {/* Top Summary Card */}
+            <div
+              className="pv-card"
+              style={{
+                backgroundColor: '#1C1C1C',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
+                padding: '24px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                  <div style={{ fontSize: '11px', color: '#7A8694', letterSpacing: '0.1em', marginBottom: '4px' }}>WAYBILL</div>
-                  <div style={{ fontSize: '22px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#0B6157' }}>{parcel.waybillId}</div>
+                  <div style={{ fontSize: '10px', color: '#A0A0A0', letterSpacing: '0.1em' }}>CONSIGNMENT ID</div>
+                  <div className="font-mono" style={{ fontSize: '24px', fontWeight: 700, color: '#3ECF8E', marginTop: '2px' }}>
+                    {parcel.waybillId}
+                  </div>
                 </div>
-                <div style={{
-                  padding: '6px 14px',
-                  backgroundColor: parcel.status === 'CLAIMED' ? '#0B6157' :
-                                   parcel.status === 'UNLOADED' ? 'rgba(11,97,87,0.1)' : 'rgba(232,130,12,0.1)',
-                  color: parcel.status === 'CLAIMED' ? 'white' :
-                         parcel.status === 'UNLOADED' ? '#0B6157' : '#E8820C',
-                  fontWeight: 700, fontSize: '12px', letterSpacing: '0.08em',
-                }}>
+
+                <div
+                  className="font-mono"
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    backgroundColor:
+                      parcel.status === 'CLAIMED'
+                        ? 'rgba(62, 207, 142, 0.15)'
+                        : parcel.status === 'IN_TRANSIT'
+                        ? 'rgba(232, 130, 12, 0.15)'
+                        : 'rgba(255, 255, 255, 0.08)',
+                    color:
+                      parcel.status === 'CLAIMED'
+                        ? '#3ECF8E'
+                        : parcel.status === 'IN_TRANSIT'
+                        ? '#E8820C'
+                        : '#EDEDED',
+                    fontWeight: 700,
+                    fontSize: '11px',
+                    border: `1px solid ${
+                      parcel.status === 'CLAIMED'
+                        ? 'rgba(62, 207, 142, 0.3)'
+                        : parcel.status === 'IN_TRANSIT'
+                        ? 'rgba(232, 130, 12, 0.3)'
+                        : 'rgba(255, 255, 255, 0.1)'
+                    }`,
+                  }}
+                >
                   {STATUS_LABELS[parcel.status] ?? parcel.status}
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px' }}>
+              {/* Grid Details */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                  gap: '16px',
+                  paddingTop: '16px',
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
                 {[
-                  ['Route', parcel.trip.routeName],
-                  ['Bus', parcel.trip.busNumber],
-                  ['From', parcel.trip.departureDepot],
-                  ['To', parcel.trip.arrivalDepot],
-                  ['Weight', `${parcel.weightKg} kg`],
-                  ['Fare', `₹${parcel.calculatedFare.toFixed(2)}`],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <div style={{ fontSize: '10px', color: '#7A8694', letterSpacing: '0.1em', marginBottom: '2px' }}>{label.toUpperCase()}</div>
-                    <div style={{ fontWeight: 500, color: '#1A1A1A', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                  ['ROUTE', parcel.trip.routeName, false],
+                  ['BUS NUMBER', parcel.trip.busNumber, true],
+                  ['DEPARTURE', parcel.trip.departureDepot, false],
+                  ['DESTINATION', parcel.trip.arrivalDepot, false],
+                  ['PARCEL WEIGHT', `${parcel.weightKg} kg`, true],
+                  ['PAID FARE', `₹${parcel.calculatedFare.toFixed(2)}`, true],
+                ].map(([label, value, isMono]) => (
+                  <div key={label as string}>
+                    <div style={{ fontSize: '9px', color: '#A0A0A0', letterSpacing: '0.08em', marginBottom: '3px' }}>
+                      {label}
+                    </div>
+                    <div
+                      className={isMono ? 'font-mono' : ''}
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: label === 'PAID FARE' ? '#E8820C' : '#EDEDED',
+                      }}
+                    >
+                      {value}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Status timeline */}
-            <h2 style={{ fontSize: '14px', fontWeight: 700, letterSpacing: '0.08em', color: '#7A8694', marginBottom: '20px' }}>JOURNEY</h2>
-            <StatusTimeline statusLogs={parcel.statusLogs} currentStatus={parcel.status} />
+            {/* Visual Route Track with Moving Bus Graphic */}
+            <div>
+              <div style={{ fontSize: '11px', color: '#A0A0A0', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '12px' }}>
+                LIVE ROUTE &amp; CUSTODY TIMELINE
+              </div>
+              <StatusTimeline
+                statusLogs={parcel.statusLogs}
+                currentStatus={parcel.status}
+                departureDepot={parcel.trip.departureDepot}
+                arrivalDepot={parcel.trip.arrivalDepot}
+                busNumber={parcel.trip.busNumber}
+              />
+            </div>
 
-            {/* WhatsApp opt-in — two step flow */}
-            <div style={{ marginTop: '32px', padding: '20px', backgroundColor: 'white', border: '1.5px solid #e8e3dc' }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Status Notifications</div>
+            {/* WhatsApp Notifications (Two-Step Flow) */}
+            <div
+              className="pv-card"
+              style={{
+                backgroundColor: '#1C1C1C',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '8px',
+                padding: '22px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                <span style={{ fontSize: '18px' }}>💬</span>
+                <span style={{ fontSize: '14px', fontWeight: 600, color: '#EDEDED' }}>
+                  WhatsApp Courier Alerts
+                </span>
+              </div>
 
+              {/* Step 1: Idle (Show Intent Button) */}
               {waStep === 'idle' && (
-                <button
-                  onClick={handleWhatsAppStep1}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '12px 20px', backgroundColor: '#0B6157', color: 'white',
-                    border: 'none', fontFamily: 'IBM Plex Sans, sans-serif', fontWeight: 600,
-                    fontSize: '14px', cursor: 'pointer', width: '100%',
-                  }}
-                >
-                  <span style={{ fontSize: '18px' }}>💬</span>
-                  Get updates on WhatsApp
-                </button>
-              )}
-
-              {waStep === 'step1_tapped' && (
                 <div>
-                  <p style={{ fontSize: '13px', color: '#1A1A1A', marginBottom: '16px', lineHeight: 1.5 }}>
-                    Once you've sent the join message in WhatsApp, tap below to activate updates.
+                  <p style={{ fontSize: '12px', color: '#A0A0A0', marginBottom: '16px', lineHeight: 1.4 }}>
+                    Receive real-time WhatsApp updates as this bus departs, arrives at intermediate hubs, and completes delivery.
                   </p>
-                  <button
-                    onClick={handleWhatsAppConfirm}
-                    disabled={optInLoading}
-                    style={{
-                      padding: '12px 20px', backgroundColor: optInLoading ? '#7A8694' : '#0B6157',
-                      color: 'white', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif',
-                      fontWeight: 600, fontSize: '14px', cursor: optInLoading ? 'not-allowed' : 'pointer',
-                      width: '100%',
-                    }}
-                  >
-                    {optInLoading ? 'Activating…' : 'Yes, activate updates'}
-                  </button>
                   <button
                     onClick={handleWhatsAppStep1}
                     style={{
-                      marginTop: '8px', padding: '10px', backgroundColor: 'transparent',
-                      color: '#7A8694', border: '1px solid #d0cbc4', fontFamily: 'IBM Plex Sans, sans-serif',
-                      fontSize: '12px', cursor: 'pointer', width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '11px 18px',
+                      backgroundColor: '#3ECF8E',
+                      color: '#0A0A0A',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 700,
+                      fontSize: '13px',
+                      cursor: 'pointer',
                     }}
                   >
-                    Re-open WhatsApp
+                    <span>💬</span> Get updates on WhatsApp →
                   </button>
                 </div>
               )}
 
-              {waStep === 'confirmed' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#0B6157', fontSize: '14px', fontWeight: 600 }}>
-                  <span style={{ fontSize: '20px' }}>✓</span>
-                  WhatsApp updates activated for this parcel.
+              {/* Step 2: Confirmation Step (Requires Explicit User Click) */}
+              {waStep === 'step1_tapped' && (
+                <div
+                  style={{
+                    backgroundColor: '#141414',
+                    border: '1px solid rgba(62, 207, 142, 0.2)',
+                    borderRadius: '6px',
+                    padding: '16px',
+                  }}
+                >
+                  <p style={{ fontSize: '13px', color: '#EDEDED', margin: '0 0 14px', lineHeight: 1.5 }}>
+                    Once you've sent the join message in WhatsApp, tap below to activate updates.
+                  </p>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={handleWhatsAppConfirm}
+                      disabled={optInLoading}
+                      style={{
+                        padding: '10px 18px',
+                        backgroundColor: '#3ECF8E',
+                        color: '#0A0A0A',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: 700,
+                        fontSize: '13px',
+                        cursor: optInLoading ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {optInLoading ? 'Activating…' : 'Yes, activate updates →'}
+                    </button>
+                    <button
+                      onClick={handleWhatsAppStep1}
+                      style={{
+                        padding: '10px 14px',
+                        backgroundColor: 'transparent',
+                        color: '#A0A0A0',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Re-open WhatsApp
+                    </button>
+                  </div>
                 </div>
               )}
 
+              {/* Step 3: Confirmed Active State */}
+              {waStep === 'confirmed' && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    color: '#3ECF8E',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    backgroundColor: 'rgba(62, 207, 142, 0.08)',
+                    padding: '10px 14px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(62, 207, 142, 0.2)',
+                  }}
+                >
+                  <span style={{ fontSize: '16px' }}>✓</span>
+                  WhatsApp courier alerts active for this consignment.
+                </div>
+              )}
+
+              {/* Error State */}
               {waStep === 'error' && (
                 <div>
-                  <div style={{ color: '#dc2626', fontSize: '13px', marginBottom: '12px' }}>{waError}</div>
+                  <div className="font-mono" style={{ color: '#ff6b6b', fontSize: '12px', marginBottom: '10px' }}>
+                    {waError}
+                  </div>
                   <button
                     onClick={handleWhatsAppConfirm}
-                    style={{ padding: '10px 16px', backgroundColor: '#0B6157', color: 'white', border: 'none', fontFamily: 'IBM Plex Sans, sans-serif', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
+                    style={{
+                      padding: '8px 14px',
+                      backgroundColor: '#3ECF8E',
+                      color: '#0A0A0A',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 600,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                    }}
                   >
                     Try Again
                   </button>

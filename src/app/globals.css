@@ -1,29 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --color-green: #0B6157;
-  --color-green-dark: #094d45;
-  --color-green-light: #0d7a6e;
+  --color-base: #0A0A0A;
+  --color-card: #1C1C1C;
+  --color-input: #141414;
+  --color-accent: #3ECF8E;
   --color-amber: #E8820C;
-  --color-amber-dark: #c46e09;
-  --color-amber-light: #f0943a;
-  --color-stone: #F5F2EE;
-  --color-stone-dark: #E8E3DC;
-  --color-text: #1A1A1A;
-  --color-muted: #7A8694;
+  --color-primary-text: #EDEDED;
+  --color-muted-text: #A0A0A0;
   --font-family-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-family-mono: 'JetBrains Mono', monospace;
 }
 
-/* CSS variable aliases for inline style="" usage */
 :root {
-  --color-green: #0B6157;
+  --bg-base: #0A0A0A;
+  --bg-card: #1C1C1C;
+  --bg-input: #141414;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-focus: #3ECF8E;
+  --color-accent: #3ECF8E;
   --color-amber: #E8820C;
-  --color-bg: #F5F2EE;
-  --color-text: #1A1A1A;
-  --color-muted: #7A8694;
-  --color-white: #FFFFFF;
+  --text-primary: #EDEDED;
+  --text-muted: #A0A0A0;
   --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 *, *::before, *::after {
@@ -32,54 +33,105 @@
 
 html {
   scroll-behavior: smooth;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--color-bg);
-  color: var(--color-text);
+  background-color: var(--bg-base);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
 }
 
 ::selection {
-  background-color: var(--color-amber);
-  color: var(--color-white);
+  background-color: var(--color-accent);
+  color: #0A0A0A;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* Print utilities */
+/* Supabase-style Dark Input */
+.pv-input {
+  width: 100%;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pv-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 1px var(--border-focus);
+}
+
+.pv-input::placeholder {
+  color: #555555;
+}
+
+/* Supabase-style Card */
+.pv-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+/* Subtle continuous drift animation for IN_TRANSIT bus */
+@keyframes bus-drift {
+  0% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  100% { transform: translateX(-4px); }
+}
+
+.animate-bus-drift {
+  animation: bus-drift 3s ease-in-out infinite;
+}
+
+/* Road dash animation */
+@keyframes road-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+.animate-road-dash {
+  animation: road-dash 1.2s linear infinite;
+}
+
+/* Print Utilities - Explicit Light Inversion */
 @media print {
+  body {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+  }
   .no-print {
     display: none !important;
   }
   .print-only {
     display: block !important;
   }
-  body {
-    background: white;
+  .waybill-print-target {
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    border: 2px solid #000000 !important;
   }
 }
 
 .print-only {
   display: none;
 }
-
-/* Timeline animation */
-@keyframes timeline-fill {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.timeline-animate {
-  animation: timeline-fill 0.4s ease forwards;
-}
-
-.timeline-animate:nth-child(1) { animation-delay: 0ms; }
-.timeline-animate:nth-child(2) { animation-delay: 120ms; }
-.timeline-animate:nth-child(3) { animation-delay: 240ms; }
-.timeline-animate:nth-child(4) { animation-delay: 360ms; }
-.timeline-animate:nth-child(5) { animation-delay: 480ms; }
